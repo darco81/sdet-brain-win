@@ -130,6 +130,35 @@ uv run sdet-brain-embed encode "Hello SDET Brain"
 uv run sdet-brain-embed health
 ```
 
+## How to ingest your corpus
+
+The pipeline walks Markdown files, parses frontmatter, chunks them
+semantically, embeds the chunks, and upserts them into Qdrant. Re-runs
+are idempotent: files whose `content_hash` has not changed are
+skipped.
+
+```bash
+# 1. Make sure Qdrant is running and the collection exists.
+docker compose -f docker/docker-compose.yml up -d qdrant
+uv run sdet-brain-qdrant init
+
+# 2. Ingest a directory (or a single file).
+uv run sdet-brain-ingest /Users/you/notes
+uv run sdet-brain-ingest /Users/you/notes/single-file.md
+
+# 3. Re-running shows the cache hit.
+uv run sdet-brain-ingest /Users/you/notes
+# -> "skipped N files (cache)"
+
+# 4. Force a re-embed (e.g. after switching embedding providers).
+uv run sdet-brain-ingest /Users/you/notes --force
+```
+
+Source-type tagging is path-driven: files inside the brand drafts,
+articles, sprint-reports, or project-knowledge directories pick up the
+right `source_type` payload automatically. Anything outside lands as
+`unknown`.
+
 ## Project status
 
 This repo is at the **bootstrap** milestone (`v0.1.0`). The skeleton, tooling,

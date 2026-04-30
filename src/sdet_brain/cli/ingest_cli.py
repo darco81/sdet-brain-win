@@ -1,0 +1,124 @@
+"""CLI entrypoint for the ingestion pipeline.
+
+Examples
+--------
+
+    uv run python -m sdet_brain.cli.ingest_cli /path/to/dir
+    uv run python -m sdet_brain.cli.ingest_cli /path/to/file.md --force
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from tqdm import tqdm
+
+from sdet_brain.config import Settings, get_settings
+from sdet_brain.embeddings.factory import get_embedder
+from sdet_brain.ingestion.pipeline import (
+    DEFAULT_BATCH_SIZE,
+    ingest_path,
+)
+from sdet_brain.ingestion.source_classifier import (
+    SourceConfig,
+    default_source_config_from_mapping,
+)
+from sdet_brain.storage.collections import COLLECTION_NAME, init_collections
+from sdet_brain.storage.qdrant_client import QdrantStorage
+
+logger = logging.getLogger("sdet_brain.cli.ingest")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="sdet-brain-ingest",
+        description="Walk a Markdown source and (re-)ingest it into Qdrant.",
+    )
+    parser.add_argument("path", type=Path, help="File or directory to ingest.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-embed even when content_hash already matches.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help="Number of chunks embedded per API/MLX call.",
+    )
+    return parser
+
+
+def _build_source_config() -> SourceConfig:
+    """Return the default source-classifier config for the brand corpus.
+
+    The mapping mirrors the paths declared in `SDET-BRAIN-BOOTSTRAP-PROMPT.md`
+    so files placed inside those trees pick up the right source-type
+    tag. Anything outside lands in the ``unknown`` bucket.
+    """
+    drafts_dir = Path("/Users/dariusz/dev/darco81/sdet-brand-drafts")
+    return default_source_config_from_mapping(
+        {
+            "project-knowledge": [str(drafts_dir)],
+            "drafts": [str(drafts_dir)],
+            "articles": [
+                "/Users/dariusz/dev/darco81/portfolio-v2/src/content/from-the-field"
+            ],
+            "sprint-reports": [
+                "/Users/dariusz/dev/darco81/sdet-wcag-toolkit/docs/sprints",
+                "/Users/dariusz/dev/darco81/sdet-wcag-pro/docs/sprints",
+            ],
+        }
+    )
+
+
+def _run(args: argparse.Namespace, settings: Settings) -> int:
+    if not args.path.exists():
+        print(f"ERROR: {args.path} does not exist", file=sys.stderr)
+        return 1
+
+    selection = get_embedder(settings)
+    if selection.fell_back:
+        print(
+            f"warning: primary provider unavailable, using {selection.provider}",
+            file=sys.stderr,
+        )
+
+    with QdrantStorage(settings.qdrant_url, api_key=settings.qdrant_api_key) as storage:
+        init_collections(storage, vector_size=selection.embedder.vector_size)
+        files = list(args.path.rglob("*.md")) if args.path.is_dir() else [args.path]
+        progress = tqdm(files, unit="file", desc="ingest")
+        stats = ingest_path(
+            args.path,
+            storage,
+            selection.embedder,
+            source_config=_build_source_config(),
+            collection=COLLECTION_NAME,
+            batch_size=args.batch_size,
+            force_reindex=args.force,
+            progress=iter(progress),
+        )
+        progress.close()
+    print(stats.summary())
+    if stats.errors:
+        for src, message in stats.errors:
+            print(f"  ERROR {src}: {message}", file=sys.stderr)
+    return 0 if not stats.errors else 2
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    settings = get_settings()
+    logging.basicConfig(
+        level=settings.log_level,
+        format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
+    )
+    args = _build_parser().parse_args(argv)
+    return _run(args, settings)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
