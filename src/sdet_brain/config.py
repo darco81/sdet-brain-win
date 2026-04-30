@@ -82,6 +82,37 @@ class Settings(BaseSettings):
     )
     watcher_debounce_ms: int = Field(default=300)
 
+    # --- Brand corpus source paths (per source_type) ---
+    # Each is a comma-separated list of absolute directories. CLI
+    # handlers (ingest, watcher) consume these to wire up the source
+    # classifier. Empty means "no roots registered for that
+    # source_type" - files outside all roots tag as `unknown`.
+    project_knowledge_paths: str = Field(
+        default="",
+        description="Comma-separated paths whose 01-PROJECT-CONTEXT/etc files map to project-knowledge.",
+    )
+    drafts_paths: str = Field(
+        default="",
+        description="Comma-separated paths to draft Markdown trees.",
+    )
+    articles_paths: str = Field(
+        default="",
+        description="Comma-separated paths to published article trees.",
+    )
+    sprint_reports_paths: str = Field(
+        default="",
+        description="Comma-separated paths to sprint-report directories.",
+    )
+    brief_paths: str = Field(
+        default="",
+        description="Comma-separated paths to brief / spec / methodology trees.",
+    )
+
+
+def parse_path_list(value: str) -> list[str]:
+    """Split a comma-separated env var into a clean list of paths."""
+    return [item.strip() for item in value.split(",") if item.strip()]
+
 
 def get_settings() -> Settings:
     """Return a cached Settings instance.
