@@ -58,6 +58,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ingest, cache hits, modify-and-replace, `--force`, and source-type
   tagging.
 - README "How to ingest your corpus" section.
+- Chunk text is now persisted on the Qdrant payload (`payload.text`)
+  so search results carry the original content alongside metadata.
+- FastAPI application factory (`sdet_brain.server.app:create_app`)
+  with a lifespan context that lazily wires Qdrant + the embedder and
+  reports degraded states through `/health`. Routes:
+  `/health`, `/status`, `/search`, `/ingest`. OpenAPI spec at
+  `/openapi.json`, Swagger UI at `/docs`.
+- FastMCP 3 wrapper exposing the server as MCP tools across three
+  transports - stdio (`sdet-brain-mcp-stdio`), SSE
+  (`sdet-brain-mcp-sse`), and streamable HTTP mounted on the FastAPI
+  app under `/mcp`. T1-06 ships a placeholder `ping` tool; T1-07 adds
+  the real surface.
+- Server tests using `fastapi.testclient.TestClient` covering
+  healthy/degraded/unavailable health responses, OpenAPI exposure,
+  and lifespan resilience to a missing Qdrant.
+- README "Running the server" section with Claude Desktop config.
 
 ## [0.1.0] - 2026-04-30 - Initial bootstrap
 

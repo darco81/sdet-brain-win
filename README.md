@@ -130,6 +130,40 @@ uv run sdet-brain-embed encode "Hello SDET Brain"
 uv run sdet-brain-embed health
 ```
 
+## Running the server
+
+Three transports cover the realistic deployment surfaces:
+
+```bash
+# 1. REST + MCP-over-HTTP (default - serves /health, /status,
+#    /search, /ingest, /docs, /openapi.json, plus /mcp for MCP-HTTP).
+uv run sdet-brain-server
+
+# 2. MCP over stdio (the transport Claude Desktop uses).
+uv run sdet-brain-mcp-stdio
+
+# 3. MCP over Server-Sent Events (long-lived connection for remote
+#    Claude Code or OpenCode clients; defaults to port 8081).
+uv run sdet-brain-mcp-sse
+```
+
+Claude Desktop config snippet (macOS path is
+`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "sdet-brain": {
+      "command": "/Users/<you>/dev/darco81/sdet-brain/.venv/bin/sdet-brain-mcp-stdio"
+    }
+  }
+}
+```
+
+The current build (T1-06) ships a placeholder `ping` MCP tool so each
+transport can be smoke-tested. The real tool surface (`search`,
+`ingest`, `list_sources`, `get_chunk_neighbors`) lands in T1-07.
+
 ## How to ingest your corpus
 
 The pipeline walks Markdown files, parses frontmatter, chunks them
