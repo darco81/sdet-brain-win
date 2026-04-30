@@ -114,6 +114,7 @@ def _build_payload(
     created_at: str,
 ) -> dict[str, object]:
     return {
+        "text": chunk.text,
         "source_path": document.source_path,
         "source_type": source_type,
         "chunk_index": chunk.chunk_index,
