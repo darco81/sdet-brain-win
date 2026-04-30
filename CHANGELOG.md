@@ -42,6 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test fixtures (`simple.md`, `voice-sample.md`, `complex.md`) plus 18
   ingestion tests covering chunker behaviour, frontmatter edge cases,
   and end-to-end document parsing.
+- End-to-end ingestion pipeline: `sdet_brain.ingestion.pipeline`
+  walks Markdown sources, batches embeddings (default 32), and upserts
+  deterministic UUID5 points into Qdrant. Re-ingestion short-circuits
+  on `content_hash` matches; modifications trigger a delete-and-replace
+  pass.
+- Path-driven source classifier
+  (`sdet_brain.ingestion.source_classifier`) tagging chunks as
+  `project-knowledge`, `drafts`, `articles`, `sprint-reports`, or
+  `unknown`.
+- `sdet-brain-ingest` CLI with progress bar (`tqdm`), `--force`
+  bypass, and an `IngestStats` summary.
+- 7 pipeline tests against a live Qdrant container with a
+  deterministic 16-dim fake embedder, covering single/directory
+  ingest, cache hits, modify-and-replace, `--force`, and source-type
+  tagging.
+- README "How to ingest your corpus" section.
 
 ## [0.1.0] - 2026-04-30 - Initial bootstrap
 

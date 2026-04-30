@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "google-genai>=0.8.0",
     "tenacity>=9.0.0",
+    "tqdm>=4.66.0",
     "mlx-embeddings>=0.0.3 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
@@ -31,6 +32,7 @@ dev = [
     "mypy>=1.13.0",
     "ruff>=0.7.0",
     "types-pyyaml>=6.0.12",
+    "types-tqdm>=4.66.0",
 ]
 
 [project.scripts]
