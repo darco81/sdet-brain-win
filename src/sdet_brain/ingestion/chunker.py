@@ -22,6 +22,8 @@ from sdet_brain.ingestion.models import Chunk
 
 DEFAULT_TARGET_CHARS: Final[int] = 800
 DEFAULT_OVERLAP_RATIO: Final[float] = 0.15
+SMALL_TAIL_THRESHOLD_CHARS: Final[int] = 250
+TAIL_MERGE_UPPER_BOUND_MULT: Final[float] = 1.5  # 1.5 * target_size, ~1200 by default
 HEADING_PATTERN: Final[re.Pattern[str]] = re.compile(r"^(#{1,4})\s+(.*?)\s*$")
 CODE_FENCE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^```")
 TABLE_SEPARATOR_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\s*\|?[\s|:-]+\|[\s|:-]+\s*$")
@@ -178,6 +180,55 @@ def _split_long_paragraph(text: str, target: int) -> list[str]:
     return [piece for piece in pieces if piece]
 
 
+def _merge_small_tails(
+    texts: list[str],
+    headings: list[str],
+    has_code_flags: list[bool],
+    *,
+    threshold: int,
+    upper_bound: int,
+) -> tuple[list[str], list[str], list[bool]]:
+    """Merge sub-``threshold`` chunks into the previous chunk.
+
+    A chunk is eligible for merge when:
+    - its own char count is below ``threshold``,
+    - the previous chunk did NOT end in a code fence (we never extend
+      atomic code blocks),
+    - the combined size stays at or below ``upper_bound``.
+
+    The previous chunk's `has_code` flag wins so downstream overlap
+    code-fence guard still works. The merged chunk inherits the
+    previous chunk's `heading_path` (the small tail's path is usually
+    a sibling subsection - we prefer the parent in the merged context).
+    """
+    if not texts:
+        return texts, headings, has_code_flags
+
+    merged_texts: list[str] = [texts[0]]
+    merged_headings: list[str] = [headings[0]]
+    merged_codes: list[bool] = [has_code_flags[0]]
+
+    for index in range(1, len(texts)):
+        text = texts[index]
+        prev_has_code = merged_codes[-1]
+        small_enough = len(text) < threshold
+        prev_size = len(merged_texts[-1])
+        combined_size = prev_size + len(text) + 2  # join "\n\n"
+        can_merge = (
+            small_enough
+            and not prev_has_code
+            and combined_size <= upper_bound
+        )
+        if can_merge:
+            merged_texts[-1] = f"{merged_texts[-1]}\n\n{text}"
+            # heading + has_code stay as previous chunk's
+            continue
+        merged_texts.append(text)
+        merged_headings.append(headings[index])
+        merged_codes.append(has_code_flags[index])
+    return merged_texts, merged_headings, merged_codes
+
+
 def _build_overlap(prev_chunk_text: str, ratio: float) -> str:
     if ratio <= 0 or not prev_chunk_text:
         return ""
@@ -282,6 +333,19 @@ def chunk_markdown(
 
     if not chunk_texts:
         return []
+
+    # Post-process: merge sub-threshold trailing chunks into their
+    # predecessor so tiny "Watcher"-style sections don't pollute search
+    # ranking with low-signal hits. Skip the merge when the previous
+    # chunk ended in a code fence (atomic block, do NOT extend), and
+    # never let the merge cross the upper bound.
+    chunk_texts, chunk_headings, chunk_has_code = _merge_small_tails(
+        chunk_texts,
+        chunk_headings,
+        chunk_has_code,
+        threshold=SMALL_TAIL_THRESHOLD_CHARS,
+        upper_bound=int(target_size * TAIL_MERGE_UPPER_BOUND_MULT),
+    )
 
     # Apply overlap. We never duplicate code fences, so when the
     # previous chunk ended inside a code fence we skip the overlap.

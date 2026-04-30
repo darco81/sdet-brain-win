@@ -143,3 +143,87 @@ def test_invalid_inputs_raise() -> None:
         chunk_markdown("hello", target_size=0)
     with pytest.raises(ValueError):
         chunk_markdown("hello", overlap_pct=1.5)
+
+
+# --- SDE-40 small-tail merge ---
+
+
+def test_small_tail_merges_into_previous_prose_chunk() -> None:
+    """A sub-250-char trailing section folds into the preceding prose chunk.
+
+    Pre-merge layout would be 3 chunks (lone heading, body, tiny tail).
+    Post-merge: heading still flushes alone (heading-only chunk lives
+    < 250 chars and is itself a tail), so the tail rolls into the body.
+    """
+    body = (
+        "## First section\n\n"
+        + ("alpha beta gamma delta. " * 30)
+        + "\n\n## Tiny tail\n\nA short tail under 250 chars.\n"
+    )
+    chunks = chunk_markdown(body, target_size=600, overlap_pct=0.0)
+    # Tiny tail must end up inside one of the chunks (the merge target),
+    # NOT as its own chunk.
+    tail_carriers = [c for c in chunks if "A short tail under 250 chars" in c.text]
+    assert len(tail_carriers) == 1
+    carrier = tail_carriers[0]
+    assert "alpha beta" in carrier.text
+    assert "Tiny tail" in carrier.text
+    # Carrier should be substantial (merge target), not the lone tail.
+    assert carrier.char_count > 250
+
+
+def test_small_tail_after_code_block_is_not_merged() -> None:
+    """Code-fenced previous chunk stays atomic - no append."""
+    body = (
+        "## Pipeline\n\n"
+        "```python\n"
+        + "print('chunk-anchor')\n" * 30
+        + "```\n\n"
+        "## Tail\n\nShort follow-up under 250 chars.\n"
+    )
+    chunks = chunk_markdown(body, target_size=400, overlap_pct=0.0)
+    assert len(chunks) >= 2
+    code_chunks = [c for c in chunks if c.has_code]
+    assert code_chunks, "expected a code-fenced chunk"
+    # The code chunk must NOT have absorbed the tail prose.
+    assert not any("Short follow-up" in c.text for c in code_chunks)
+
+
+def test_small_tail_does_not_cross_upper_bound() -> None:
+    """If combining would exceed upper_bound (1.5 * target), keep separate."""
+    target = 400
+    # First chunk near upper bound, tail is small but combined > upper.
+    body = (
+        "## Big\n\n"
+        + ("word " * 130)  # ~650 chars - close to upper bound 600
+        + "\n\n## Mini\n\n"
+        + ("tiny " * 40)  # ~200 chars
+    )
+    chunks = chunk_markdown(body, target_size=target, overlap_pct=0.0)
+    # Combined ~850 > upper_bound 600 -> stay split.
+    assert len(chunks) >= 2
+
+
+def test_threshold_boundary_at_250() -> None:
+    """Exactly 250-char tail should NOT merge (threshold is strict <250)."""
+    body = (
+        "## Big\n\n"
+        + ("alpha " * 80)  # ~480 chars
+        + "\n\n## Edge\n\n"
+        + ("x" * 250)  # exactly 250 chars
+    )
+    chunks = chunk_markdown(body, target_size=400, overlap_pct=0.0)
+    # 250 is NOT below threshold -> stays as separate chunk.
+    assert len(chunks) >= 2
+
+
+def test_chunk_indices_renumber_after_merge() -> None:
+    """After merging, indices must be 0..n-1 and total_chunks consistent."""
+    body = (
+        "## A\n\n" + ("alpha " * 50)
+        + "\n\n## B\n\n" + ("beta " * 50)
+        + "\n\n## C\n\n" + "tiny tail."
+    )
+    chunks = chunk_markdown(body, target_size=300, overlap_pct=0.0)
+    assert [c.chunk_index for c in chunks] == list(range(len(chunks)))
+    assert all(c.total_chunks == len(chunks) for c in chunks)
