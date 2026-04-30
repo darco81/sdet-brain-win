@@ -7,6 +7,7 @@ import sys
 
 from sdet_brain.config import get_settings
 from sdet_brain.server.mcp_server import build_mcp
+from sdet_brain.server.state import build_default_state
 
 
 def main() -> int:
@@ -17,7 +18,8 @@ def main() -> int:
         # stdio transport reserves stdout for the protocol; logs go to stderr.
         stream=sys.stderr,
     )
-    mcp = build_mcp()
+    state = build_default_state(settings)
+    mcp = build_mcp(state_getter=lambda: state)
     mcp.run(transport="stdio")
     return 0
 
