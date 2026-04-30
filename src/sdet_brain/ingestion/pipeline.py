@@ -60,14 +60,35 @@ class IngestStats:
         )
 
 
-def _iter_markdown_files(root: Path) -> Iterator[Path]:
-    """Yield ``.md`` files under ``root`` (or just ``root`` itself)."""
+def _iter_markdown_files(
+    root: Path, exclude_dirs: tuple[Path, ...] = ()
+) -> Iterator[Path]:
+    """Yield ``.md`` files under ``root`` (or just ``root`` itself).
+
+    Hidden path parts (anything starting with ``.``) are always
+    skipped. ``exclude_dirs`` lets callers drop sub-trees (e.g. a
+    `v0.4-planning/` folder that should not yet be indexed).
+    """
+    resolved_excludes = tuple(d.resolve() for d in exclude_dirs)
+
+    def _is_excluded(path: Path) -> bool:
+        resolved = path.resolve()
+        for parent in resolved_excludes:
+            try:
+                resolved.relative_to(parent)
+                return True
+            except ValueError:
+                continue
+        return False
+
     if root.is_file():
-        if root.suffix.lower() == ".md":
+        if root.suffix.lower() == ".md" and not _is_excluded(root):
             yield root
         return
     for path in sorted(root.rglob("*.md")):
         if any(part.startswith(".") for part in path.parts):
+            continue
+        if _is_excluded(path):
             continue
         yield path
 
@@ -195,6 +216,7 @@ def ingest_path(
     collection: str = COLLECTION_NAME,
     batch_size: int = DEFAULT_BATCH_SIZE,
     force_reindex: bool = False,
+    exclude_dirs: tuple[Path, ...] = (),
     progress: Iterator[Path] | None = None,
 ) -> IngestStats:
     """Walk ``path`` and ingest every Markdown file beneath it.
@@ -223,7 +245,7 @@ def ingest_path(
         ``None``.
     """
     config = source_config or SourceConfig()
-    files = list(_iter_markdown_files(path))
+    files = list(_iter_markdown_files(path, exclude_dirs=exclude_dirs))
     iterator: Iterator[Path] = progress if progress is not None else iter(files)
 
     stats = IngestStats()

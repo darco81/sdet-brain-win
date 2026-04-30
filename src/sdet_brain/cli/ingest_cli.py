@@ -50,6 +50,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_BATCH_SIZE,
         help="Number of chunks embedded per API/MLX call.",
     )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        type=Path,
+        metavar="DIR",
+        help="Directory subtree to skip (repeatable).",
+    )
     return parser
 
 
@@ -100,6 +108,7 @@ def _run(args: argparse.Namespace, settings: Settings) -> int:
             collection=COLLECTION_NAME,
             batch_size=args.batch_size,
             force_reindex=args.force,
+            exclude_dirs=tuple(args.exclude),
             progress=iter(progress),
         )
         progress.close()
