@@ -19,10 +19,21 @@ services:
       - ./qdrant_storage:/qdrant/storage
     environment:
       QDRANT__LOG_LEVEL: INFO
+    # Healthcheck via bash + /dev/tcp:
+    # - The qdrant/qdrant image strips wget, curl, nc, and python in
+    #   `latest` (verified 2026-04-30). Only `bash` is available among
+    #   networking-capable shells.
+    # - `CMD-SHELL` would invoke `/bin/sh` (dash) which does NOT support
+    #   bash's `/dev/tcp/<host>/<port>` redirect. We invoke `bash`
+    #   explicitly so the redirect works.
+    # - The probe sends `GET /readyz HTTP/1.0` and checks the status
+    #   line for `200 OK`. Faster than parsing JSON.
     healthcheck:
       test:
         [
-          "CMD-SHELL",
+          "CMD",
+          "bash",
+          "-c",
           "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '200 OK'",
         ]
       interval: 5s
