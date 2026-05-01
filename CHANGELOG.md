@@ -7,10 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Documentation
+_Tier 2 (`v0.2.0`) and Tier 3 (`v0.3.0`) work pending - see Linear
+issues SDE-28..SDE-36._
 
-- docs: clarify Claude Desktop requires `mcp-remote` stdio bridge
-  (HTTP transport works only in Claude Code CLI).
+## [0.1.1] - 2026-04-30 - Tier 1 polish
+
+Phase A of the Tier 2/3 overnight sprint - four T1 follow-ups
+captured in the v0.1.0 sprint report.
+
+### Fixed
+
+- **Qdrant compose healthcheck reports `healthy`** (`SDE-37`).
+  The `latest` Qdrant image strips `wget`, `curl`, `nc`, and
+  `python` - only `bash` is available. Switched the probe from
+  `CMD-SHELL` (which invokes `dash`) to `CMD` with explicit
+  `bash -c` so the existing `/dev/tcp` redirect works. Container
+  flips to `healthy` within ~15 s.
+
+### Changed
+
+- **Brand corpus paths now configurable via env vars** (`SDE-38`,
+  unblocks T3-03 VPS deploy).
+  New `Settings` fields: `PROJECT_KNOWLEDGE_PATHS`, `DRAFTS_PATHS`,
+  `ARTICLES_PATHS`, `SPRINT_REPORTS_PATHS`, `BRIEF_PATHS`. Each is
+  comma-separated; empty falls back to the local-dev defaults in
+  `cli/ingest_cli.py:LOCAL_DEFAULT_PATHS`. The watcher CLI shares the
+  same dict so a single `.env` controls both ingestion modes.
+  README "Configure your corpus paths" subsection added.
+
+- **Documentation:** clarified that Claude Desktop requires the
+  `mcp-remote` stdio bridge - HTTP transport in `mcpServers` only
+  works for Claude Code CLI.
+
+### Performance
+
+- **Batch cache-check during directory ingest** (`SDE-39`,
+  O(N) -> O(1) round-trips). New `_load_existing_hashes()` issues a
+  single Qdrant scroll using `MatchAny` over the union of source
+  paths and builds an in-memory `{path: content_hash}` dict before
+  the file walk. Single-file ingests (REST `/ingest`, watcher
+  events) keep the per-file path - no overhead.
+
+- **Chunker merges sub-250-char trailing sections** (`SDE-40`).
+  New `_merge_small_tails()` post-process pass folds tiny tails
+  into their predecessor when (a) the tail is below
+  `SMALL_TAIL_THRESHOLD_CHARS = 250`, (b) the previous chunk did
+  NOT end in a code fence (atomic protection), and (c) the
+  combined size stays at or below 1.5x target. Re-ingest of the
+  78-file `sdet-brand-drafts` directory: -3.2% chunks (2409 -> 2333).
+
+### Tests
+
+- 77 -> 82 (5 new chunker tests covering simple merge, code-block
+  anchor protection, upper-bound enforcement, threshold boundary
+  at 250, and post-merge index renumbering).
+
+### Quality gates at release
+
+- `uv run ruff check src tests` -> 0 issues.
+- `uv run mypy --strict src` -> 42 source files clean.
+- `uv run pytest -q` -> 82 passed.
+
+### Atomic commits
+
+- `b6af9ae` chore(docker): use bash + /dev/tcp for Qdrant healthcheck
+- `b209a91` refactor(config): brand corpus paths via env vars (T3-03 prep)
+- `15ba851` perf(ingestion): batch cache-check via single scroll
+- `2e7abd9` perf(chunker): merge sub-250-char trailing sections
 
 ## [0.1.0] - 2026-04-30 - Tier 1 MVP shipped
 
