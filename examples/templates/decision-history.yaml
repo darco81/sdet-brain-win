@@ -1,0 +1,9 @@
+name: decision-history
+description: Past decisions / verdicts / policies on a topic
+tool: search_decisions
+args:
+  limit: 10
+query_template: "{{topic}} decision rationale"
+default_args:
+  topic: deploy strategy
+output_format: markdown
