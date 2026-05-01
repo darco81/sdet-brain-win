@@ -7,8 +7,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Tier 2 (`v0.2.0`) and Tier 3 (`v0.3.0`) work pending - see Linear
-issues SDE-28..SDE-36._
+## [0.3.0] - 2026-05-01 - Tier 3 brain: local LLM + chat
+
+Block 3 of the May-Day overnight sprint. Adds local-first LLM
+inference and a conversational chat endpoint on top of the v0.2.0
+hybrid retrieval stack. **Zero API keys.**
+
+### Added
+
+- **Local MLX LLM** (`SDE-32`). New `sdet_brain.llm.protocol`
+  defines `ILLM` (generate / chat / chat_stream / health_check) plus
+  `ChatMessage` and `LLMError`. `mlx_provider.MLXLLm` wraps
+  `mlx_lm.load + generate + stream_generate`; default model
+  `mlx-community/Qwen3-Next-80B-A3B-Instruct-4bit`. Thread-safe
+  lazy load: ~30-60s cold start on M4 Pro, ~70 tok/s warm.
+  `Settings` exposes `LLM_MODEL`, `LLM_MAX_TOKENS`, `LLM_TEMPERATURE`.
+
+- **Two new MCP tools** built on the local LLM:
+  - `query_rewrite(query, limit, source_type)` - HyDE pattern. Local
+    LLM writes a hypothetical answer paragraph in the corpus's
+    voice, the paragraph (not the bare query) is hybrid-searched.
+    Output Markdown shows both the hypothetical and matched chunks
+    for auditability. Use for terse / under-specified queries.
+  - `summarize_results(topic, limit, source_type)` - hybrid-search
+    a topic, feed top chunks to LLM with a brand-aware system
+    prompt, return one concise paragraph with `[n]` inline
+    citations plus a Sources section. Polish topic → Polish
+    summary; English → English. Use when the user wants the answer,
+    not a list of chunks.
+
+- **POST /chat** (`SDE-33`) - multi-turn conversational endpoint
+  with optional Server-Sent Events streaming. Stateless server:
+  every request carries the full history. The latest user turn is
+  hybrid-searched against the corpus; retrieved chunks land in the
+  system prompt so the LLM cites them inline.
+  - JSON response (`stream=false`): `{reply, sources,
+    retrieved_chunk_count}`.
+  - SSE response (`stream=true`): `data: {"text": "..."}` per
+    token, terminated by `data: {"event": "done", "sources": [...],
+    "retrieved": N}`.
+  - Brand-voice system prompt (Polish-default, blunt, cite-or-admit).
+  - HTML test client checked in at `docs/chat-test.html` - open in
+    a browser, point it at `localhost:8080/chat`, submit a turn,
+    watch tokens stream in.
+
+### Tests
+
+- 159 → 165 passing (+6 chat tests, +9 LLM protocol/factory tests
+  earlier in the day = +15 since v0.2.0).
+
+### Quality gates at release
+
+- `uv run ruff check src tests` - clean.
+- `uv run mypy --strict src` - 65 source files clean.
+- `uv run pytest -q` - **165 passed**.
+
+### Atomic commits
+
+- `9542ceb` feat(llm): MLX local LLM + query_rewrite + summarize tools (SDE-32)
+- `6b3c3cf` feat(server): conversational chat with SSE streaming (SDE-33)
+
+### Deferred
+
+- `SDE-34` (RAGAS eval) - local-LLM-as-judge custom scaffold not
+  justified within the weekend budget. Reopen with eval-shaped time;
+  the LLM + chat layer is already production-shaped, so future eval
+  work is pure harness-building.
+
+## [0.2.0] - 2026-05-01 - Tier 2 brain: hybrid + reranking + taxonomy + domain tools
+
+Block 1 + Block 2 of the May-Day overnight sprint.
+
+### Added
+
+- **Cross-encoder reranking** (`SDE-31`). New
+  `sdet_brain.embeddings.reranker` exposing `IReranker`,
+  `FastembedReranker`, `RerankCandidate`, `RerankResult`,
+  `RerankerError`. Lazy-loads ONNX weights on first call. POST
+  `/search` and the MCP `search` tool gain an opt-in `rerank` flag
+  that over-fetches and re-orders via cross-encoder. Default model:
+  `jinaai/jina-reranker-v2-base-multilingual` (PL+EN aware; the
+  spec'd `BAAI/bge-reranker-v2-m3` is not in fastembed's registry).
+
+- **Structured frontmatter taxonomy + payload indexes** (`SDE-28`).
+  `BrandFrontmatter` Pydantic model (category, tags, status, series,
+  episode, part, language, created_at, updated_at). Validation is
+  graceful - failed parse logs WARNING and the file still ingests
+  with raw header preserved. Pipeline lifts validated fields onto
+  top-level Qdrant payload keys; 7 new payload indexes (`category`,
+  `status`, `tags`, `series`, `language` keyword + `fm_created_at`,
+  `fm_updated_at` datetime). Migration CLI
+  (`uv run python -m sdet_brain.cli.migrate_frontmatter`) walks the
+  corpus, classifies every file from filename heuristics, prepends
+  YAML where missing, and *merges* into existing-but-invalid
+  headers (preserving user-supplied tags / dates while normalising
+  free-form statuses like `in-progress` → `draft`,
+  `completed`/`done`/`decided`/`log` → `published`). Dry-run by
+  default; `--apply` writes in place. Migration log committed under
+  `migrations/`.
+
+- **5 domain-specific MCP tools** (`SDE-29`) wrapping the search
+  pipeline with preset payload filters:
+  - `search_voice_samples` (category=voice-sample)
+  - `search_smaczki` (category=smaczki)
+  - `search_decisions(topic, since=YYYY-MM-DD)` - DatetimeRange on
+    `fm_created_at`
+  - `list_articles_by_status(status, series)` - scrolls case-study
+    chunks, groups by file
+  - `search_sprint_reports(query, project)` - `project` maps to
+    `series`
+  - Each tool's MCP description carries an explicit "Use when…"
+    sentence so the LLM picks the right tool from the user's
+    phrasing.
+
+- **Hybrid search (dense + BM25 + RRF)** (`SDE-30`) - the headline
+  Tier 2 win. New `sdet_brain.embeddings.sparse_embedder` exposes
+  `ISparseEmbedder` Protocol and `FastembedBM25` impl. Collection
+  is now named-vector: `dense` (cosine 1024) + sparse `bm25` (IDF
+  modifier). `QdrantStorage.hybrid_search` runs two `Prefetch`es
+  under `FusionQuery(Fusion.RRF)`; the same payload filter scopes
+  both legs. Default search route runs hybrid; `hybrid: false` in
+  the request opts out. The win is on hyphenated keywords and
+  exact tokens (`port-collision`, `WCAG 2.2 AA`) where dense alone
+  generalises tokens away. Benchmark
+  (`docs/benchmarks/hybrid-vs-semantic.md`) shows 3 sample queries
+  before/after.
+
+### Migration
+
+- Production collection wiped and recreated with named vectors.
+  Pre-recreate Qdrant snapshot saved as
+  `sdet_brand_v1-3556520363950657-2026-05-01-05-36-24.snapshot`
+  (1.13 GB) inside the `sdet-brain-qdrant` container, with a
+  redundant local copy at
+  `/tmp/qdrant-snapshot-pre-hybrid-20260501-0736.snapshot`. Full
+  corpus re-ingested: 139 files / 2700 chunks across drafts,
+  strategy, brief, from-the-field, and both sprint-report
+  directories.
+
+### Tests
+
+- 82 → 144 (+62) at the end of Block 2: 11 reranker, 36
+  frontmatter (schema + classifier), 13 domain-tool, 2 hybrid
+  storage tests.
+
+### Quality gates at release
+
+- `uv run ruff check src tests` - clean.
+- `uv run mypy --strict src` - 54 source files clean.
+- `uv run pytest -q` - **144 passed**.
+
+### Atomic commits
+
+- `0348db4` feat(search): cross-encoder reranking layer (SDE-31)
+- `56539ac` feat(ingestion): structured frontmatter schema + payload indexes (SDE-28)
+- `652888d` feat(server): 5 domain-specific MCP tools (SDE-29)
+- `d1e5dd3` feat(search): hybrid semantic + BM25 with RRF fusion (SDE-30)
 
 ## [0.1.1] - 2026-04-30 - Tier 1 polish
 
