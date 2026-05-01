@@ -35,7 +35,13 @@ from sdet_brain.server.tools.get_chunk_neighbors import (
 )
 from sdet_brain.server.tools.ingest import ingest_path as ingest_path_tool
 from sdet_brain.server.tools.list_sources import list_sources as list_sources_tool
+from sdet_brain.server.tools.query_rewrite import (
+    query_rewrite as query_rewrite_tool,
+)
 from sdet_brain.server.tools.search import search as search_tool
+from sdet_brain.server.tools.summarize_results import (
+    summarize_results as summarize_results_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +198,48 @@ def build_mcp(state_getter: StateGetter | None = None) -> FastMCP:
         """
         state = _require_state(state_getter())
         return list_articles_by_status_tool(state, status=status, series=series)
+
+    @mcp.tool
+    def query_rewrite(
+        query: str,
+        limit: int = 5,
+        source_type: str | None = None,
+    ) -> str:
+        """Expand a short query via local-LLM HyDE, then hybrid-search.
+
+        Use this when the user asks something terse or under-specified
+        ("flaky tests playbook", "what's smaczki?") - the local LLM
+        drafts a hypothetical answer paragraph in the corpus's voice,
+        and we retrieve against that. Materially better recall than
+        searching the bare query because the hypothetical is closer in
+        embedding space to the kind of passage that actually answers
+        it. First call after server start pays the ~30-60s LLM cold
+        start; subsequent calls are warm.
+        """
+        state = _require_state(state_getter())
+        return query_rewrite_tool(
+            state, query=query, limit=limit, source_type=source_type
+        )
+
+    @mcp.tool
+    def summarize_results(
+        topic: str,
+        limit: int = 8,
+        source_type: str | None = None,
+    ) -> str:
+        """Hybrid-search a topic and have the local LLM write a summary.
+
+        Use this when the user wants the answer, not a list of chunks
+        ("summarize my decisions about CI from last week", "what did
+        I conclude about Plausible vs PostHog"). Returns one concise
+        paragraph with inline [n] citations referring to the
+        retrieved sources, plus a Sources section listing the source
+        files. Polish queries get Polish summaries.
+        """
+        state = _require_state(state_getter())
+        return summarize_results_tool(
+            state, topic=topic, limit=limit, source_type=source_type
+        )
 
     @mcp.tool
     def search_sprint_reports(
