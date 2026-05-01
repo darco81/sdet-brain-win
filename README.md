@@ -462,6 +462,33 @@ curl -X PUT localhost:6333/collections/sdet_brand_v1/snapshots/recover \
   -d '{"location":"<snapshot path>"}'
 ```
 
+## How this was built
+
+Six release tiers (`v0.1.0` → `v0.5.0`) shipped between 2026-04-30 and
+2026-05-01 across three Claude Code sessions, driven by hand-written
+sprint prompts kept under
+[`../sdet-brand-drafts/`](../sdet-brand-drafts/) (`SDET-BRAIN-*-PROMPT.md`).
+Each tier was scoped, tracked, and closed with the same discipline:
+
+- **Per-issue Linear tracking** with decisions, quality gates, and
+  smoke results documented as comments before close.
+- **Atomic conventional commits** - one feature per commit, no mixed
+  concerns.
+- **Quality gates re-run before every commit**: `pytest` (213 tests by
+  v0.5.0), `mypy --strict` (70 source files), `ruff` clean.
+- **Sprint report per tier** in [`docs/sprints/`](docs/sprints/) with
+  goals vs delivered, lessons learned, and a morning checklist for
+  the next session.
+- **Explicit deferral with reopen criteria** for everything that
+  didn't fit a sprint window - see the Backlog subsection of
+  [Status](#status) for the live list and Linear refs.
+
+The compressed timeline is intentional: each prompt was an autonomous
+overnight run, and the discipline of *write the prompt first, then
+execute* is what kept scope honest. Read any of the
+`SDET-BRAIN-*-PROMPT.md` files alongside the matching tier sprint
+report to see the loop end-to-end.
+
 ## Status
 
 **v0.5.0 - Production-ready (local-only).** Six sprints shipped between
