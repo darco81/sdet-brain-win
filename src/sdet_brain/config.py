@@ -126,6 +126,20 @@ class Settings(BaseSettings):
         description="Top-K to return after reranking.",
     )
 
+    # --- Local LLM (T2-05) ---
+    llm_model: str = Field(
+        default="mlx-community/Qwen3-Next-80B-A3B-Instruct-4bit",
+        description="Local MLX model id used by query_rewrite, summarize, and chat.",
+    )
+    llm_max_tokens: int = Field(
+        default=512,
+        description="Default upper bound on generated tokens per LLM call.",
+    )
+    llm_temperature: float = Field(
+        default=0.7,
+        description="Default sampling temperature (0.0 = deterministic, 1.0 = creative).",
+    )
+
 
 def parse_path_list(value: str) -> list[str]:
     """Split a comma-separated env var into a clean list of paths."""
