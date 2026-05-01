@@ -35,6 +35,9 @@ from sdet_brain.server.tools.get_chunk_neighbors import (
 )
 from sdet_brain.server.tools.ingest import ingest_path as ingest_path_tool
 from sdet_brain.server.tools.list_sources import list_sources as list_sources_tool
+from sdet_brain.server.tools.multi_query import (
+    multi_query_search as multi_query_search_tool,
+)
 from sdet_brain.server.tools.query_rewrite import (
     query_rewrite as query_rewrite_tool,
 )
@@ -219,6 +222,35 @@ def build_mcp(state_getter: StateGetter | None = None) -> FastMCP:
         state = _require_state(state_getter())
         return query_rewrite_tool(
             state, query=query, limit=limit, source_type=source_type
+        )
+
+    @mcp.tool
+    def multi_query_search(
+        query: str,
+        limit: int = 5,
+        per_query_limit: int = 8,
+        source_type: str | None = None,
+    ) -> str:
+        """Decompose a multi-hop query into sub-queries, fuse results.
+
+        Use this when the user's question has TWO OR MORE topics or asks
+        a comparison/relationship ("Jak się ma WCAG toolkit publication
+        plan vs portfolio deploy day?", "what shipped this week and
+        what's blocked?"). The local Thinking model splits the question
+        into 3-5 sub-queries, each gets a full hybrid search, and the
+        ranked lists are merged with Reciprocal Rank Fusion. The result
+        shows the decomposition for auditability so the caller can
+        verify the model split the question sensibly. Don't use this
+        for simple single-topic queries - the regular `search` tool is
+        cheaper and just as good.
+        """
+        state = _require_state(state_getter())
+        return multi_query_search_tool(
+            state,
+            query=query,
+            limit=limit,
+            per_query_limit=per_query_limit,
+            source_type=source_type,
         )
 
     @mcp.tool
