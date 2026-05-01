@@ -286,17 +286,138 @@ SDET_BRAIN_CORPUS_HOST=/Users/you/notes \
 pending debounced events. Hidden files, `node_modules`, and anything
 that isn't `.md` are filtered automatically.
 
+## Operations
+
+The brain is "set and forget" on a single Mac: a `launchd` agent
+boots `sdet-brain-server` at login, Qdrant runs from
+`docker compose`, and both Claude Desktop and Claude Code talk to
+the same `:8080/mcp` endpoint. This section covers the few moments
+when you need to look under the hood.
+
+### 30-second health check
+
+Three commands tell you whether the stack is alive:
+
+```bash
+# Daemon process up?
+launchctl list | grep darkow
+# -> 8-digit PID  0  com.darkow.sdet-brain
+
+# Server + Qdrant + embedder reachable?
+curl -s http://localhost:8080/health | jq .
+# -> status=ok, embedder_ok=true, collection_count > 0
+
+# Claude Code sees it?
+claude mcp list | grep sdet-brain
+# -> http://localhost:8080/mcp (HTTP) - ✓ Connected
+```
+
+If all three pass: the brain is fine.
+
+### Restart commands
+
+```bash
+# Restart the server daemon (reloads Settings + clears any wedged state).
+launchctl kickstart -k "gui/$(id -u)/com.darkow.sdet-brain"
+
+# Restart Qdrant (if /readyz returns 503 or compose ps shows unhealthy).
+docker compose -f docker/docker-compose.yml restart qdrant
+
+# Hard restart of both (when in doubt - takes ~20 s).
+launchctl unload ~/Library/LaunchAgents/com.darkow.sdet-brain.plist
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml up -d qdrant
+launchctl load -w ~/Library/LaunchAgents/com.darkow.sdet-brain.plist
+sleep 12 && curl -s http://localhost:8080/health | jq .status
+```
+
+### Logs
+
+```bash
+# Server (uvicorn + lifespan + per-request).
+tail -f /tmp/sdet-brain-server.log
+tail -f /tmp/sdet-brain-server.err.log
+
+# Qdrant container.
+docker logs -f sdet-brain-qdrant
+```
+
+### Troubleshooting
+
+**Brain not responding at all** -- daemon down or port 8080 taken.
+
+```bash
+launchctl list | grep darkow                  # if missing -> reload plist
+lsof -iTCP:8080 -sTCP:LISTEN                   # if foreign owner -> kill it
+tail -50 /tmp/sdet-brain-server.err.log        # check the crash trail
+```
+
+**Search returns empty results** -- Qdrant collection missing or empty.
+
+```bash
+curl -s localhost:6333/collections | jq .
+# If sdet_brand_v1 is missing:
+uv run sdet-brain-qdrant init
+# If empty (chunks=0):
+uv run sdet-brain-cli /Users/you/notes  # re-ingest your corpus
+```
+
+**MLX model first-call cold start** -- expected, ~2-5 s on M-series.
+Subsequent calls are warm. Check the `embedder_ok=true` flag in
+`/health` to confirm the lazy load worked.
+
+**`mcp-remote` keeps reconnecting** -- known issue when Claude
+Desktop loses the daemon between auto-restarts. Either:
+- restart Claude Desktop (`Quit & Restart` from menu), or
+- run `launchctl kickstart -k gui/$(id -u)/com.darkow.sdet-brain`
+  and reopen the chat.
+
+**Linear MCP plugin says `! Needs authentication`** -- OAuth token
+expired (typically every ~24 h). In CC: type `/mcp`, find
+`plugin:linear:linear`, click `Authenticate`, complete the browser
+flow.
+
+**Watcher not picking up edits** -- it filters `.md` only and skips
+hidden / `node_modules`. Confirm the path matches your watch list
+and the file ends in `.md`. For non-`.md` content, ingest manually
+via `sdet-brain-cli`.
+
+### Backup + restore
+
+The corpus lives on disk; Qdrant stores embeddings derived from it.
+A disaster recovery is one command:
+
+```bash
+uv run sdet-brain-cli /Users/you/notes  # re-embed everything
+```
+
+For point-in-time vector backups (before `v0.2.0` collection
+migration in T2-03):
+
+```bash
+# Snapshot.
+curl -X POST localhost:6333/collections/sdet_brand_v1/snapshots
+docker cp sdet-brain-qdrant:/qdrant/snapshots ./backups/
+
+# Restore.
+curl -X PUT localhost:6333/collections/sdet_brand_v1/snapshots/recover \
+  -H 'Content-Type: application/json' \
+  -d '{"location":"<snapshot path>"}'
+```
+
 ## Project status
 
-This repo is at the **bootstrap** milestone (`v0.1.0`). The skeleton, tooling,
-and Docker scaffolding are in place - everything else is sequenced as Linear
-issues `SDE-18` through `SDE-36` (Tiers 1 / 2 / 3).
+Currently at `v0.1.1` (Tier 1 polish). Tier 1 MVP (`v0.1.0`)
+shipped 2026-04-30; Phase A follow-ups (`v0.1.1`) shipped same day.
+Tier 2 / Tier 3 are sequenced for May 2026 after the Series #01
+publication window.
 
-| Tier | Goal | Tracked in |
-| --- | --- | --- |
-| 1 (`v0.1.0`) | MVP - local Qdrant, ingestion pipeline, MCP server, 4 core tools | SDE-18..SDE-27 |
-| 2 (`v0.2.0`) | Domain tools, hybrid search, reranking, local LLM | SDE-28..SDE-32 |
-| 3 (`v0.3.0`) | Conversational chat, eval suite, VPS deploy with HMAC auth | SDE-33..SDE-36 |
+| Tier | Status | Goal | Tracked in |
+| --- | --- | --- | --- |
+| 1 (`v0.1.0`) | shipped | MVP - local Qdrant, ingestion pipeline, MCP server, 4 core tools | SDE-18..SDE-27 |
+| 1 polish (`v0.1.1`) | shipped | bash healthcheck, env-driven paths, batch cache-check, chunker tail merge | SDE-37..SDE-40 |
+| 2 (`v0.2.0`) | pending | Domain tools, hybrid search, reranking, local LLM | SDE-28..SDE-32 |
+| 3 (`v0.3.0`) | pending | Conversational chat, eval suite, VPS deploy with HMAC auth | SDE-33..SDE-36 |
 
 See [`docs/sprints/`](docs/sprints/) for per-task sprint reports.
 
