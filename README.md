@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-213_passing-success.svg)](#testing)
-[![License](https://img.shields.io/badge/license-Proprietary-lightgrey.svg)](#license)
+[![License](https://img.shields.io/badge/license-Source--Available-yellow.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-production_local-success.svg)](#status)
 
 ## Why this exists
@@ -560,5 +560,12 @@ Detailed planning lives outside this repo (private):
 
 ## License
 
-Proprietary. Not for external distribution while the brand corpus remains
-private.
+Source-available, license terms in [LICENSE](LICENSE).
+
+**Short version:** code is here for transparency and reference. You can
+inspect it, learn from the architecture, and run it locally for your
+own evaluation. Commercial deployments, hosted variants, and
+multi-tenant integrations are separate engagements.
+
+A formal OSI license (likely AGPL-3.0 or similar) may be selected in
+a future release as part of a structured public launch.

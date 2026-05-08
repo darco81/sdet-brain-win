@@ -1,0 +1,28 @@
+SDET Brain - Source-Available License (TBD)
+
+Copyright (c) 2026 Dariusz Kowalski
+
+This source code is published for transparency, reference, and
+prior-art documentation purposes.
+
+Permission is granted to:
+- View and inspect the source code
+- Run the software locally for personal, non-commercial evaluation
+- Reference the architecture and design decisions in derivative work
+  with attribution
+
+This is NOT an open-source license under the OSI definition.
+The author retains full rights to:
+- Choose a different license (open or commercial) at any future date
+- Offer commercial variants, hosted services, or consulting based on
+  this codebase
+- Restrict redistribution
+
+For commercial use, hosted deployments, multi-tenant variants, or
+custom integrations, contact the author.
+
+These license terms may be replaced by a formal OSI-approved license
+in a future release. Current users should not assume permanence of
+these terms.
+
+Contact: darecki9k@gmail.com
