@@ -324,19 +324,17 @@ right `source_type` payload automatically. Anything outside lands as
 ### Configure your corpus paths
 
 The CLI reads source roots from environment variables (one comma-
-separated list per `source_type`). On Dariusz's local box every var is
-empty and the CLI falls back to a hard-coded default that points at
-his repos. On any other machine - especially the VPS deploy in T3-03
-- set the env vars explicitly so files outside Dariusz's home are
-classified correctly:
+separated list per `source_type`). Set them in your `.env` so the
+classifier can tag files outside the configured roots as
+`source_type=unknown`:
 
 ```bash
 # .env or shell env
-PROJECT_KNOWLEDGE_PATHS=/srv/brand/drafts
-DRAFTS_PATHS=/srv/brand/drafts
-ARTICLES_PATHS=/srv/brand/articles
-SPRINT_REPORTS_PATHS=/srv/brand/sprint-reports/toolkit,/srv/brand/sprint-reports/pro
-BRIEF_PATHS=/srv/brand/brief
+PROJECT_KNOWLEDGE_PATHS=/srv/corpus/drafts
+DRAFTS_PATHS=/srv/corpus/drafts
+ARTICLES_PATHS=/srv/corpus/articles
+SPRINT_REPORTS_PATHS=/srv/corpus/sprint-reports/toolkit,/srv/corpus/sprint-reports/pro
+BRIEF_PATHS=/srv/corpus/brief
 ```
 
 Each var accepts a comma-separated list. Empty means "fall back to
