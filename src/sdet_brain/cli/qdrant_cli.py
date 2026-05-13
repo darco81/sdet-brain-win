@@ -25,8 +25,19 @@ logger = logging.getLogger("sdet_brain.cli.qdrant")
 
 
 def _vector_size_for(settings: Settings) -> int:
-    if settings.embedding_provider == "mlx":
-        return settings.mlx_vector_size
+    """Pick the vector_size to init the collection with.
+
+    Ollama (bge-m3) uses 1024 dims, matching the upstream Mac config so a
+    collection initialised by either side stays interchangeable. Gemini
+    text-embedding-004 is 768. We probe the embedder here only when
+    `settings.embedding_provider` doesn't tell us deterministically.
+    """
+    if settings.embedding_provider == "ollama":
+        # Hard-coded to 1024 because that's what bge-m3 emits and the
+        # only Ollama model the fork recommends. If someone wires a
+        # different Ollama model in `.env`, they should also pass an
+        # explicit `--vector-size` flag (left as TODO when needed).
+        return 1024
     return settings.gemini_vector_size
 
 

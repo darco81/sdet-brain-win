@@ -61,7 +61,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--batch-size",
         type=int,
         default=DEFAULT_BATCH_SIZE,
-        help="Number of chunks embedded per API/MLX call.",
+        help="Number of chunks embedded per provider call.",
     )
     parser.add_argument(
         "--exclude",
