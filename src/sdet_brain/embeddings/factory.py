@@ -2,11 +2,12 @@
 
 `get_embedder(settings)` reads `EMBEDDING_PROVIDER` and returns an
 `IEmbedder` honouring the user's preference. If the primary provider's
-`health_check()` fails (e.g. Ollama not running), we fall back to the
-secondary when its credentials/runtime are present.
+`health_check()` fails (e.g. Ollama not running), we fall back to
+``gemini`` when its credentials are present.
 
-Windows fork: only `gemini` is wired here; `ollama` provider lands in
-P2 (see ClickUp implementation plan).
+Windows fork: default is ``ollama`` (bge-m3 via local Ollama server).
+``gemini`` stays available as a cloud fallback for the case where
+Ollama is down.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 
 from sdet_brain.config import EmbeddingProvider, Settings
 from sdet_brain.embeddings.gemini_provider import GeminiEmbedder
+from sdet_brain.embeddings.ollama_provider import OllamaEmbedder
 from sdet_brain.embeddings.protocol import EmbeddingError, IEmbedder
 
 EmbedderBuilder = Callable[[Settings], IEmbedder]
@@ -34,6 +36,15 @@ class EmbedderSelection:
     attempted: tuple[EmbeddingProvider, ...]
 
 
+def _build_ollama(settings: Settings) -> IEmbedder:
+    return OllamaEmbedder(
+        host=settings.ollama_host,
+        model_name=settings.ollama_embed_model,
+        batch_size=settings.ollama_batch_size,
+        timeout_s=settings.ollama_timeout_s,
+    )
+
+
 def _build_gemini(settings: Settings) -> IEmbedder:
     if not settings.gemini_api_key:
         raise EmbeddingError(
@@ -47,6 +58,7 @@ def _build_gemini(settings: Settings) -> IEmbedder:
 
 
 _BUILDERS: dict[EmbeddingProvider, EmbedderBuilder] = {
+    "ollama": _build_ollama,
     "gemini": _build_gemini,
 }
 
@@ -72,6 +84,8 @@ def _try_build(
 def get_embedder(settings: Settings) -> EmbedderSelection:
     """Build an embedding provider, falling back to the alternate on failure."""
     primary = settings.embedding_provider
+    secondary: EmbeddingProvider = "gemini" if primary == "ollama" else "ollama"
+
     attempted: list[EmbeddingProvider] = [primary]
     embedder = _try_build(primary, settings)
     if embedder is not None:
@@ -82,7 +96,17 @@ def get_embedder(settings: Settings) -> EmbedderSelection:
             attempted=tuple(attempted),
         )
 
+    logger.info("Falling back from %s to %s", primary, secondary)
+    attempted.append(secondary)
+    embedder = _try_build(secondary, settings)
+    if embedder is not None:
+        return EmbedderSelection(
+            embedder=embedder,
+            provider=secondary,
+            fell_back=True,
+            attempted=tuple(attempted),
+        )
+
     raise EmbeddingError(
-        f"No embedding provider available. Tried: {', '.join(attempted)}. "
-        "(Note: Ollama provider lands in P2 — see ClickUp plan.)",
+        f"No embedding provider available. Tried: {', '.join(attempted)}.",
     )

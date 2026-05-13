@@ -23,6 +23,7 @@ dependencies = [
     "tqdm>=4.66.0",
     "fastembed>=0.4",
     "psutil>=5.9",
+    "windows-toasts>=1.1.0 ; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +45,6 @@ sdet-brain-watcher = "sdet_brain.cli.watcher_cli:main"
 sdet-brain-cli = "sdet_brain.cli.ingest_cli:main"
 sdet-brain-qdrant = "sdet_brain.cli.qdrant_cli:main"
 sdet-brain-embed = "sdet_brain.cli.embed_cli:main"
-sdet-brain = "sdet_brain.cli.templates_cli:main"
 
 [build-system]
 requires = ["hatchling"]
