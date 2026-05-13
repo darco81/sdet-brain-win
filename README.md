@@ -210,11 +210,60 @@ print('OK')
 
 Restart Claude Code (close all `claude` processes, open new terminal). Type `/mcp` in a Claude Code chat — `sdet-brain` should appear with all tools.
 
-### Step 10 — Wire to Claude Desktop
+### Step 10 — Wire to Claude Desktop (Windows MSIX)
 
-**Limitation:** Claude Desktop MSIX (Microsoft Store version, Anthropic's current Windows distribution) does **not** currently load `claude_desktop_config.json` for local MCP servers. Tracking upstream for Store support.
+**It works after this exact dance** — verified on Claude Desktop `1.7196.0.0` (Windows MSIX from Microsoft Store / claude.ai/download). Plus a few gotchas worth knowing:
 
-If you have the **classic standalone .exe** version of Claude Desktop, copy `examples\claude-desktop-mcp.json` to `%APPDATA%\Claude\claude_desktop_config.json` (substitute `<USER>`), tray Quit + reopen the app. The `search` tool should appear under the hammer icon in chat.
+**The actual file Claude Desktop reads on Win MSIX:**
+
+```
+C:\Users\<USER>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json
+```
+
+This is the **UWP-virtualised** version of `%APPDATA%\Claude\claude_desktop_config.json`. Both paths point at the same file thanks to MSIX's redirect, so you can edit either — but the canonical one is the long UWP path. Confirm by opening Claude Desktop → **Settings → Developer → Edit Config** — Notepad opens the file Claude Desktop is actually reading.
+
+**Drop merge (PowerShell, preserves existing `preferences` if Claude already created the file):**
+
+```powershell
+# Save script to temp, run, cleanup
+@'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+cfg = json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
+cfg.setdefault('mcpServers', {})['sdet-brain'] = {
+    'command': r'C:\Users\<USER>\.local\bin\uv.exe',
+    'args': ['run', '--directory', r'C:\Users\<USER>\dev\sdet-brain-win', 'sdet-brain-mcp-stdio'],
+    'env': {
+        'EMBEDDING_PROVIDER': 'ollama',
+        'OLLAMA_HOST': 'http://localhost:11434',
+        'OLLAMA_EMBED_MODEL': 'bge-m3',
+        'QDRANT_URL': 'http://localhost:6333',
+        'RERANK_ENABLED': 'true',
+    },
+}
+p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding='utf-8')
+print('OK')
+'@ | Set-Content "$env:TEMP\merge-mcp.py" -Encoding UTF8
+
+python "$env:TEMP\merge-mcp.py" "C:\Users\<USER>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json"
+```
+
+**Then FULL restart Claude Desktop:**
+
+1. **Tray icon** (bottom-right, near the clock) → right-click → **Quit** (NOT "close window" — close just hides; all 9 Claude processes keep running and the config never reloads)
+2. Wait 5 seconds — verify with `Get-Process claude` (should return nothing)
+3. Open Claude Desktop again from Start Menu
+4. In a new chat, click the **hammer/tools icon** at the bottom-right of the input box → you should see `sdet-brain` with the list of tools (search, list_sources, get_chunk_neighbors, etc.)
+
+**Critical Windows-specific gotchas:**
+
+- ⚠️ **After every Claude Desktop reinstall**, the MSIX overwrites `claude_desktop_config.json` and wipes the `mcpServers` key from your config. You need to **re-merge** the MCP block. This repo's `examples\claude-desktop-mcp.json` is a clean template you can use as the source of truth.
+- ⚠️ **`uv.exe` must be referenced by full absolute path** in the config — `C:\Users\<USER>\.local\bin\uv.exe` — not just `uv.exe`. Claude Desktop's spawned child process doesn't inherit the user's `PATH`.
+- ⚠️ **Settings → Developer → Edit Config** opens the right file but **doesn't auto-reload** — you still need the tray-Quit + reopen step for changes to apply.
+- ⚠️ **`EBUSY` errors in `main.log`** are usually NOT about your MCP server. They're Claude Desktop's bundled Claude Code Daemon (CCD) downloading + spawning its own `claude.exe`. Look for `MCP Server connection requested for: sdet-brain` lines — that's the actual MCP attempt. If you don't see them, the config wasn't picked up (= reinstall wipe, see above).
+- ⚠️ **Anthropic also reads `~/.claude.json`** (the Claude Code CLI config) for some MCP-aware features. The included merge scripts populate both for safety.
+
+**Claude Code CLI** is simpler — `~/.claude.json` MCP entry survives across versions, no UWP redirect issue. If Claude Desktop refuses to cooperate after a future Anthropic build change, Claude Code CLI always works.
 
 ### Step 11 — (Optional) Daily automation
 
