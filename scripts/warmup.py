@@ -30,14 +30,20 @@ except ImportError:
 def warm_reranker() -> int:
     """Load the cross-encoder so fastembed downloads + caches the ONNX file."""
     try:
-        from sdet_brain.embeddings.reranker import get_reranker
+        from sdet_brain.embeddings.reranker import RerankCandidate, get_reranker
     except Exception as exc:
         print(f"  reranker import failed: {exc}", file=sys.stderr)
         return 1
     try:
         rerank = get_reranker()
-        # Force lazy load by scoring a dummy pair.
-        rerank.rerank("warmup probe", ["a", "b"])
+        # Force lazy load by scoring two dummy candidates.
+        rerank.rerank(
+            "warmup probe",
+            [
+                RerankCandidate(text="a", payload=None),
+                RerankCandidate(text="b", payload=None),
+            ],
+        )
     except Exception as exc:
         print(f"  reranker warmup FAILED: {exc}", file=sys.stderr)
         return 1
