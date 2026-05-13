@@ -1,7 +1,7 @@
 [project]
-name = "sdet-brain"
-version = "0.5.3"
-description = "Persistent RAG for a personal Markdown corpus - shared context across Claude clients via MCP."
+name = "sdet-brain-win"
+version = "0.1.0.dev0"
+description = "Windows + CUDA variant of sdet-brain. Stripped MLX provider and LLM router for 4 GB VRAM target."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Source-Available" }
@@ -21,9 +21,8 @@ dependencies = [
     "google-genai>=0.8.0",
     "tenacity>=9.0.0",
     "tqdm>=4.66.0",
-    "mlx-embeddings>=0.0.3 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "fastembed>=0.4",
-    "prompt-toolkit>=3.0.52",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +45,6 @@ sdet-brain-cli = "sdet_brain.cli.ingest_cli:main"
 sdet-brain-qdrant = "sdet_brain.cli.qdrant_cli:main"
 sdet-brain-embed = "sdet_brain.cli.embed_cli:main"
 sdet-brain = "sdet_brain.cli.templates_cli:main"
-sdet-brain-chat = "sdet_brain.cli.chat_repl:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -77,7 +75,7 @@ strict_equality = true
 extra_checks = true
 
 [[tool.mypy.overrides]]
-module = ["frontmatter.*", "watchdog.*", "mlx.*", "mlx_embeddings.*"]
+module = ["frontmatter.*", "watchdog.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

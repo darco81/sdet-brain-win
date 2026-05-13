@@ -28,6 +28,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-win.0] - 2026-05-13 (Windows fork baseline)
+
+**This is the Windows-targeted fork. Versioning resets to `0.1.0-win.0`
+while syncing periodically from `darco81/sdet-brain` upstream.**
+
+### Changed
+- Renamed package to `sdet-brain-win`, version reset to `0.1.0.dev0`.
+- README header marks repo as fork-in-progress; `NOTICE.md` documents
+  the relationship and one-way upstream-sync workflow.
+
+### Removed (stripped from upstream)
+- `src/sdet_brain/embeddings/mlx_provider.py` — Apple Silicon only.
+- `src/sdet_brain/llm/` — entire LLM router (Qwen3-Next-80B doesn't
+  fit 4 GB VRAM target).
+- `src/sdet_brain/server/tools/{query_rewrite,multi_query,summarize_results}.py`
+  — depended on LLM router.
+- `src/sdet_brain/server/chat/`, `routes/chat.py`, `cli/chat_repl.py`
+  — LLM REPL surface.
+- `scripts/daily.sh`, `scripts/healthcheck.sh`, `scripts/digest.py`
+  — bash + macOS-specific.
+- `mlx-embeddings` and `mlx-lm` from `pyproject.toml`.
+- All `llm_*` and `mlx_*` Settings fields from `config.py`.
+
+### Added
+- `psutil>=5.9` to dependencies (Windows-friendly memory queries).
+- `NOTICE.md` with fork attribution.
+- `EmbeddingProvider` Literal narrowed to `{"ollama", "gemini"}`.
+- New Ollama settings stubs in `config.py` (`ollama_host`, `ollama_embed_model`,
+  `ollama_batch_size`, `ollama_timeout_s`) — provider class lands in P2.
+
+### Roadmap (see ClickUp `SDET Brain Win` folder)
+- **P2** Add `OllamaEmbedder` provider class wired to factory + config.
+- **P3** Smoke-test ingest pipeline end-to-end with bge-m3 via Ollama.
+- **P4** MCP integration for Claude Code + Desktop on Windows.
+- **P5** `daily.py` cross-OS reingest with `psutil` memory guard,
+  Windows Task Scheduler template, toast notifications.
+- **P6** Documentation, screenshots, first `v0.1.0-win.1` release.
+
 ## [0.5.3] - 2026-05-11 - Memory hygiene + macOS automation
 
 Patch release focused on long-running-process memory behaviour
