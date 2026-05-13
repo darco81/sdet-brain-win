@@ -24,6 +24,7 @@ from sdet_brain.server.routes.ingest import router as ingest_router
 from sdet_brain.server.routes.search import router as search_router
 from sdet_brain.server.routes.status import router as status_router
 from sdet_brain.server.state import build_default_state
+from sdet_brain.storage.collections import init_collections
 
 logger = logging.getLogger("sdet_brain.server")
 
@@ -38,6 +39,27 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     state = build_default_state(settings)
     app.state.app_state = state
+
+    # Auto-create Qdrant collection on startup so first /ingest doesn't
+    # 404. Upstream historically only ran init_collections from the CLI,
+    # which made a dropped collection require a manual one-liner before
+    # the server could be useful again. Idempotent: init_collections
+    # treats an existing collection as a no-op.
+    if state.storage is not None and state.embedder is not None:
+        try:
+            init_collections(state.storage, vector_size=state.embedder.vector_size)
+            logger.info(
+                "Collection ready (vector_size=%d, provider=%s)",
+                state.embedder.vector_size,
+                state.embedder.model_name,
+            )
+        except Exception as exc:  # pragma: no cover - logged for ops
+            logger.warning(
+                "init_collections at startup failed (server will keep running, "
+                "next /ingest may surface the same error): %s",
+                exc,
+            )
+
     logger.info(
         "Server ready (qdrant_ok=%s, embedder_ok=%s)",
         state.storage is not None,

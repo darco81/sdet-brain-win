@@ -1,0 +1,26 @@
+{
+  "_comment_1": "Claude Code (CLI) MCP configuration for sdet-brain-win.",
+  "_comment_2": "Copy this into %USERPROFILE%\\.claude\\mcp_servers.json then restart Claude Code.",
+  "_comment_3": "Replace <USER> with your Windows username. Adjust CORPUS_PATHS.",
+  "mcpServers": {
+    "sdet-brain": {
+      "command": "uv.exe",
+      "args": [
+        "run",
+        "--directory",
+        "C:\\Users\\<USER>\\dev\\sdet-brain-win",
+        "sdet-brain-server"
+      ],
+      "env": {
+        "EMBEDDING_PROVIDER": "ollama",
+        "OLLAMA_HOST": "http://localhost:11434",
+        "OLLAMA_EMBED_MODEL": "bge-m3",
+        "QDRANT_URL": "http://localhost:6333",
+        "RERANK_ENABLED": "true",
+        "DRAFTS_PATHS": "C:\\Users\\<USER>\\dev\\my-brand-drafts",
+        "PROJECT_KNOWLEDGE_PATHS": "C:\\Users\\<USER>\\dev\\my-projects",
+        "LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}

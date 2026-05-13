@@ -41,10 +41,8 @@ class Settings(BaseSettings):
     )
 
     # --- Embeddings ---
-    # Default is `gemini` until P2 wires the OllamaEmbedder. After P2 the
-    # default flips to `ollama` and `gemini` becomes the cloud fallback.
     embedding_provider: EmbeddingProvider = Field(
-        default="gemini",
+        default="ollama",
         description="Primary embedding provider. Falls back to the other on failure.",
     )
     # Ollama settings (provider class lands in P2)
