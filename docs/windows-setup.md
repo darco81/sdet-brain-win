@@ -71,15 +71,26 @@ DRAFTS_PATHS=C:\Users\<USER>\dev\my-brand-drafts
 PROJECT_KNOWLEDGE_PATHS=C:\Users\<USER>\dev\my-projects
 ```
 
-## 5. Start the server
+## 5. Pre-warm caches (first time only)
+
+```powershell
+uv run python scripts\warmup.py
+```
+
+This downloads the fastembed reranker (~500 MB ONNX) and confirms
+Ollama has bge-m3 pulled. Without this step the first MCP server
+cold-start may take 30-60 seconds and Claude Desktop's stdio
+handshake can time out.
+
+## 6. Start the HTTP server (optional, for /ingest + manual queries)
 
 ```powershell
 uv run sdet-brain-server
 ```
 
-The server auto-creates the Qdrant collection on first start (no
-manual `init_collections` workaround required — that bug is fixed in
-this fork). Hit `http://localhost:8080/health` to confirm:
+The server auto-creates the Qdrant collection on first start
+(retries with exponential backoff if Qdrant is still booting in
+Docker). Hit `http://localhost:8080/health` to confirm:
 
 ```json
 {
@@ -92,7 +103,7 @@ this fork). Hit `http://localhost:8080/health` to confirm:
 }
 ```
 
-## 6. Ingest your corpus
+## 7. Ingest your corpus
 
 ```powershell
 curl -X POST http://localhost:8080/ingest `
@@ -103,7 +114,12 @@ curl -X POST http://localhost:8080/ingest `
 A small corpus (~10 markdown files) should finish in seconds. A full
 brand corpus (~5000 chunks) usually takes 2-4 minutes on RTX 3050 Ti.
 
-## 7. Wire it to Claude Desktop or Claude Code
+## 8. Wire it to Claude Desktop or Claude Code
+
+**Important:** the example configs run `sdet-brain-mcp-stdio` (the
+stdio MCP transport). Claude Desktop and Claude Code talk MCP over
+stdio, **not** over HTTP. Don't confuse this with `sdet-brain-server`
+(the HTTP daemon used by `daily.py` and manual /ingest calls).
 
 Copy `examples\claude-desktop-mcp.json` into
 `%APPDATA%\Claude\claude_desktop_config.json` (replace placeholders),
@@ -113,7 +129,7 @@ appear in chat.
 For Claude Code CLI: copy `examples\claude-code-mcp.json` into
 `%USERPROFILE%\.claude\mcp_servers.json` and restart Claude Code.
 
-## 8. (Optional) Daily automation
+## 9. (Optional) Daily automation
 
 ```powershell
 schtasks /Create /XML scripts\windows-task-scheduler.xml /TN sdet-brain-daily
