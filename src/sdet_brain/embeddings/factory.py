@@ -2,8 +2,11 @@
 
 `get_embedder(settings)` reads `EMBEDDING_PROVIDER` and returns an
 `IEmbedder` honouring the user's preference. If the primary provider's
-`health_check()` fails (e.g. MLX unavailable on a Linux VPS), we fall
-back to the other provider when its credentials/runtime are present.
+`health_check()` fails (e.g. Ollama not running), we fall back to the
+secondary when its credentials/runtime are present.
+
+Windows fork: only `gemini` is wired here; `ollama` provider lands in
+P2 (see ClickUp implementation plan).
 """
 
 from __future__ import annotations
@@ -14,7 +17,6 @@ from dataclasses import dataclass
 
 from sdet_brain.config import EmbeddingProvider, Settings
 from sdet_brain.embeddings.gemini_provider import GeminiEmbedder
-from sdet_brain.embeddings.mlx_provider import MLXEmbedder
 from sdet_brain.embeddings.protocol import EmbeddingError, IEmbedder
 
 EmbedderBuilder = Callable[[Settings], IEmbedder]
@@ -32,14 +34,6 @@ class EmbedderSelection:
     attempted: tuple[EmbeddingProvider, ...]
 
 
-def _build_mlx(settings: Settings) -> IEmbedder:
-    return MLXEmbedder(
-        model_name=settings.mlx_model,
-        vector_size=settings.mlx_vector_size,
-        mrl_truncate_to=settings.mlx_mrl_truncate_to,
-    )
-
-
 def _build_gemini(settings: Settings) -> IEmbedder:
     if not settings.gemini_api_key:
         raise EmbeddingError(
@@ -53,7 +47,6 @@ def _build_gemini(settings: Settings) -> IEmbedder:
 
 
 _BUILDERS: dict[EmbeddingProvider, EmbedderBuilder] = {
-    "mlx": _build_mlx,
     "gemini": _build_gemini,
 }
 
@@ -61,7 +54,10 @@ _BUILDERS: dict[EmbeddingProvider, EmbedderBuilder] = {
 def _try_build(
     provider: EmbeddingProvider, settings: Settings
 ) -> IEmbedder | None:
-    builder = _BUILDERS[provider]
+    builder = _BUILDERS.get(provider)
+    if builder is None:
+        logger.warning("Provider %s is not registered in this build.", provider)
+        return None
     try:
         candidate = builder(settings)
     except EmbeddingError as exc:
@@ -76,8 +72,6 @@ def _try_build(
 def get_embedder(settings: Settings) -> EmbedderSelection:
     """Build an embedding provider, falling back to the alternate on failure."""
     primary = settings.embedding_provider
-    secondary: EmbeddingProvider = "gemini" if primary == "mlx" else "mlx"
-
     attempted: list[EmbeddingProvider] = [primary]
     embedder = _try_build(primary, settings)
     if embedder is not None:
@@ -88,17 +82,7 @@ def get_embedder(settings: Settings) -> EmbedderSelection:
             attempted=tuple(attempted),
         )
 
-    logger.info("Falling back from %s to %s", primary, secondary)
-    attempted.append(secondary)
-    embedder = _try_build(secondary, settings)
-    if embedder is not None:
-        return EmbedderSelection(
-            embedder=embedder,
-            provider=secondary,
-            fell_back=True,
-            attempted=tuple(attempted),
-        )
-
     raise EmbeddingError(
-        f"No embedding provider available. Tried: {', '.join(attempted)}.",
+        f"No embedding provider available. Tried: {', '.join(attempted)}. "
+        "(Note: Ollama provider lands in P2 — see ClickUp plan.)",
     )

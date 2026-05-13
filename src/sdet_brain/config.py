@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-EmbeddingProvider = Literal["mlx", "gemini"]
+EmbeddingProvider = Literal["ollama", "gemini"]
 
 
 class Settings(BaseSettings):
@@ -41,30 +41,27 @@ class Settings(BaseSettings):
     )
 
     # --- Embeddings ---
+    # Default is `gemini` until P2 wires the OllamaEmbedder. After P2 the
+    # default flips to `ollama` and `gemini` becomes the cloud fallback.
     embedding_provider: EmbeddingProvider = Field(
-        default="mlx",
+        default="gemini",
         description="Primary embedding provider. Falls back to the other on failure.",
     )
-    mlx_model: str = Field(
-        default="mlx-community/Qwen3-Embedding-8B-4bit-DWQ",
-        description="HuggingFace model id for MLX local embeddings.",
+    # Ollama settings (provider class lands in P2)
+    ollama_host: str = Field(
+        default="http://localhost:11434",
+        description="Local Ollama server URL.",
     )
-    mlx_vector_size: int = Field(
-        default=1024,
-        description="Output dimensionality after any MRL truncation.",
+    ollama_embed_model: str = Field(
+        default="bge-m3",
+        description="Ollama model id used for embeddings (1024-dim).",
     )
-    mlx_mrl_truncate_to: int | None = Field(
-        default=1024,
-        description=(
-            "Matryoshka truncation length. The 8B Qwen3-Embedding emits "
-            "4096 dims natively; setting this to 1024 keeps the leading "
-            "slice (~95% retention) so the existing collection schema "
-            "stays compatible. Set to None to keep the native dimension."
-        ),
-    )
+    ollama_batch_size: int = Field(default=16)
+    ollama_timeout_s: float = Field(default=60.0)
+    # Cloud fallback / placeholder until P2
     gemini_api_key: str | None = Field(
         default=None,
-        description="Google Gemini API key (used for fallback embeddings).",
+        description="Google Gemini API key (used for fallback or pre-P2 testing).",
     )
     gemini_embedding_model: str = Field(
         default="text-embedding-004",
@@ -135,43 +132,10 @@ class Settings(BaseSettings):
         description="Top-K to return after reranking.",
     )
 
-    # --- Local LLM (T2-05) ---
-    llm_model: str = Field(
-        default="mlx-community/Qwen3-Next-80B-A3B-Instruct-4bit",
-        description="Local MLX model id used for instruct-tier tasks (chat, summarize).",
-    )
-    llm_max_tokens: int = Field(
-        default=512,
-        description="Default upper bound on generated tokens per LLM call.",
-    )
-    llm_temperature: float = Field(
-        default=0.7,
-        description="Default sampling temperature (0.0 = deterministic, 1.0 = creative).",
-    )
-
-    # --- LLM routing tiers (T4-03) ---
-    llm_routing_enabled: bool = Field(
-        default=True,
-        description="When False, every task uses ``llm_model`` (v0.3.0 behaviour).",
-    )
-    llm_fast_model: str = Field(
-        default="mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit",
-        description="Fast tier (HyDE rewrites, simple expansions).",
-    )
-    llm_reasoning_model: str = Field(
-        default="mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit",
-        description="Reasoning tier (decomposition, judging).",
-    )
-    llm_router_cache_size: int = Field(
-        default=1,
-        ge=1,
-        description=(
-            "Max concurrently-resident MLX LLM models in the router cache. "
-            "Each Qwen3-Next-80B-4bit weighs ~40 GB; default of 1 caps "
-            "resident weights on a 64 GB Mac. Increase to 2 on hosts with "
-            ">=96 GB unified memory for warm fast+instruct."
-        ),
-    )
+    # --- Local LLM ---
+    # Windows fork: LLM digest is disabled by design. 4 GB VRAM target can't
+    # fit even a small Qwen LLM alongside the embedder. Use a separate
+    # external service (e.g. Gemini API utility) if you need digests later.
 
 
 def parse_path_list(value: str) -> list[str]:
