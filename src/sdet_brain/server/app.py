@@ -45,19 +45,41 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # which made a dropped collection require a manual one-liner before
     # the server could be useful again. Idempotent: init_collections
     # treats an existing collection as a no-op.
+    #
+    # Retry with exponential backoff to survive the race where the
+    # server boots faster than Qdrant Docker container (common when
+    # `docker compose up -d` was issued seconds before).
+    import asyncio
+
     if state.storage is not None and state.embedder is not None:
-        try:
-            init_collections(state.storage, vector_size=state.embedder.vector_size)
-            logger.info(
-                "Collection ready (vector_size=%d, provider=%s)",
-                state.embedder.vector_size,
-                state.embedder.model_name,
-            )
-        except Exception as exc:  # pragma: no cover - logged for ops
+        last_exc: Exception | None = None
+        for attempt, delay in enumerate([0.0, 1.0, 2.0, 4.0, 8.0]):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                init_collections(
+                    state.storage, vector_size=state.embedder.vector_size
+                )
+                logger.info(
+                    "Collection ready (vector_size=%d, provider=%s, attempt=%d)",
+                    state.embedder.vector_size,
+                    state.embedder.model_name,
+                    attempt + 1,
+                )
+                last_exc = None
+                break
+            except Exception as exc:
+                last_exc = exc
+                logger.info(
+                    "init_collections attempt %d failed (will retry): %s",
+                    attempt + 1,
+                    exc,
+                )
+        if last_exc is not None:
             logger.warning(
-                "init_collections at startup failed (server will keep running, "
-                "next /ingest may surface the same error): %s",
-                exc,
+                "init_collections gave up after retries (server will keep "
+                "running; next /ingest may surface the same error): %s",
+                last_exc,
             )
 
     logger.info(

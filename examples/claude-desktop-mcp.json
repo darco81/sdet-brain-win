@@ -2,7 +2,8 @@
   "_comment_1": "Claude Desktop MCP configuration for sdet-brain-win.",
   "_comment_2": "Copy this into %APPDATA%\\Claude\\claude_desktop_config.json then restart Claude Desktop.",
   "_comment_3": "Replace <USER> with your Windows username (e.g. dariusz).",
-  "_comment_4": "Adjust CORPUS_PATHS to point at the markdown trees you want indexed.",
+  "_comment_4": "Adjust paths to point at the markdown trees you want indexed.",
+  "_comment_5": "IMPORTANT: this uses sdet-brain-mcp-stdio (NOT sdet-brain-server). Claude Desktop talks MCP over stdio, not HTTP. Use sdet-brain-server only if you want a long-running HTTP daemon (e.g. for the daily.py script).",
   "mcpServers": {
     "sdet-brain": {
       "command": "uv.exe",
@@ -10,7 +11,7 @@
         "run",
         "--directory",
         "C:\\Users\\<USER>\\dev\\sdet-brain-win",
-        "sdet-brain-server"
+        "sdet-brain-mcp-stdio"
       ],
       "env": {
         "EMBEDDING_PROVIDER": "ollama",
