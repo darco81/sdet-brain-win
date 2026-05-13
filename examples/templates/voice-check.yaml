@@ -1,9 +1,0 @@
-name: voice-check
-description: Find voice samples / opener phrases for a given tone match
-tool: search_voice_samples
-args:
-  limit: 10
-query_template: "{{topic}} opener tone"
-default_args:
-  topic: self-deprecating
-output_format: markdown
