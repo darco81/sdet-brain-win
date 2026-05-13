@@ -28,6 +28,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-win.1] - 2026-05-14 (Verified live on Windows)
+
+**First live verification on physical Windows hardware** (Intel i5 11th
+gen, 32 GB RAM, **NVIDIA RTX 3050 Ti 4 GB VRAM**, Windows 11). All
+e2e tests passing through Tailscale SSH session from upstream
+maintainer's Mac.
+
+### Verified
+- `scripts/bootstrap.ps1` env check: all green (Docker, Ollama, uv,
+  git, gh, Python 3.13, NVIDIA driver 591.74, VRAM 4 GB).
+- `ollama pull bge-m3` + GPU acceleration (1.2 GB model, 909-1109
+  MB VRAM resident).
+- `docker compose up -d` Qdrant on Docker Desktop (healthy, all
+  shards ready).
+- `uv sync --extra dev` installs full dep tree including
+  `windows-toasts>=1.3.1` for native notifications.
+- `scripts/warmup.py` pre-downloads fastembed reranker
+  (jina-reranker-v2-base-multilingual ONNX, ~500 MB) and probes
+  Ollama bge-m3.
+- Server lifespan auto-creates Qdrant collection with retry+backoff.
+- `POST /ingest` smoke (6 markdown LinkedIn-import files,
+  724 KB): **1042 chunks created in 35.4s ≈ 29 chunks/sec** on
+  RTX 3050 Ti.
+- `POST /search` smoke EN ("hello embeddings") + PL ("indeksowanie
+  semantyczne"): top-hit score 1.0 with correct file match in
+  both languages.
+- `scripts/daily.py` end-to-end: memory guard pass, AC-power guard
+  pass, HTTP ingest (idempotent — 0 chunks on second run because
+  cache hits), Qdrant snapshot creation (1.16 GB), Windows toast
+  notification fires.
+- Resource baseline at idle: server_rss ≈ 167 MB,
+  VRAM 1037/4096 MB, **18 GB RAM free**. Well under the 4 GB
+  VRAM target ceiling.
+
+### Fixed during live test
+- `scripts/bootstrap.ps1`: em-dashes (U+2014) replaced with ASCII
+  hyphens + UTF-8 BOM added. Windows PowerShell 5.1 reads UTF-8
+  files without BOM using Windows-1252 codepage; em-dashes parsed
+  as invalid bytes cascaded brace-mismatch errors through the
+  whole script.
+- `scripts/warmup.py`: pass `RerankCandidate(text=..., payload=None)`
+  objects to `rerank()`, not bare strings (Sequence type required).
+
+### Known Windows quirks documented
+- **Claude Desktop MSIX (Microsoft Store version)** does not
+  currently load `claude_desktop_config.json` for local MCP
+  servers. Works fine in **Claude Code CLI** which respects
+  `~/.claude.json` MCP entries. UWP sandbox restriction; pending
+  Anthropic support for local MCP in Store builds.
+- **Docker Desktop credential helper** fails in non-interactive
+  SSH sessions (`error getting credentials - Określona sesja
+  logowania nie istnieje`). Pulling images requires an interactive
+  session first; container management afterwards works via SSH.
+- **Tailscale required** for remote test session — Asus router's
+  AP isolation blocks Mac→Windows direct LAN traffic even on the
+  same SSID (one-way: Win→Mac OK, Mac→Win blocked).
+
+### Performance baseline on RTX 3050 Ti 4 GB
+- bge-m3 Q4 GGUF resident in VRAM: ~440 MB on Ollama side.
+- fastembed reranker (CPU, ONNX runtime): ~50 MB resident.
+- sdet-brain server process: 167-334 MB RSS depending on load.
+- Total stack RAM use under load: ~3.5 GB (server + Ollama + Qdrant
+  container).
+- Embedding throughput: 29 chunks/sec sustained over 1042-chunk
+  batch.
+
 ## [0.1.0-win.0] - 2026-05-13 (Windows fork baseline)
 
 **This is the Windows-targeted fork. Versioning resets to `0.1.0-win.0`
