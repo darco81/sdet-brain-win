@@ -26,31 +26,216 @@ Designed to run on a budget gaming PC. Tested baseline:
 Both 12 GB VRAM and 16 GB VRAM machines are happily supported too —
 4 GB is just the floor the codebase was tuned for.
 
-## Quick start (15 minutes)
+## Status
+
+**Live-verified on 2026-05-14** — Intel i5 11th gen / 32 GB RAM / RTX 3050 Ti 4 GB VRAM / Windows 11. End-to-end pipeline (ingest → embed → store → search → daily automation → snapshots) passes on the reference target hardware. See [CHANGELOG.md](CHANGELOG.md) `0.1.0-win.1` for the full verification list.
+
+## Onboarding — full walkthrough
+
+Greenfield install on a fresh Windows machine takes ~30 min including downloads. Half of that is `ollama pull bge-m3` and `uv sync` running unattended.
+
+### Step 0 — Prerequisites
+
+Need installed on your Windows 11 machine before cloning:
+
+| Tool | One-line install (PowerShell as Admin) |
+|------|----------------------------------------|
+| Git for Windows | `winget install --id Git.Git --silent` |
+| GitHub CLI | `winget install --id GitHub.cli --silent` |
+| Docker Desktop | `winget install --id Docker.DockerDesktop --silent` → **reboot** + start the app once |
+| Ollama for Windows | download `.exe` from https://ollama.com/download/windows → run installer |
+| uv (Python project manager) | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+
+After install: `gh auth login` to give the GitHub CLI a token for cloning.
+
+### Step 1 — Clone the fork
 
 ```powershell
-# 1. Clone + verify environment
+mkdir C:\Users\<USER>\dev -Force
+cd C:\Users\<USER>\dev
 git clone git@github.com:darco81/sdet-brain-win.git
 cd sdet-brain-win
+git checkout windows-port
+```
+
+Or via HTTPS if SSH not set up:
+
+```powershell
+git clone https://github.com/darco81/sdet-brain-win.git
+```
+
+### Step 2 — Verify the environment with bootstrap.ps1
+
+```powershell
 .\scripts\bootstrap.ps1
+```
 
-# 2. Pull embedding model
-ollama pull bge-m3
+Output is human-readable, each missing piece prints its install command. Expect:
 
-# 3. Start Qdrant
+```
+[ OK ] Docker daemon reachable
+[ OK ] Ollama CLI installed
+[ OK ] Ollama service reachable on localhost:11434
+[ OK ] uv installed
+[ OK ] git installed
+[ OK ] gh CLI installed
+[ OK ] nvidia-smi reachable
+    NVIDIA GeForce RTX 3050 Ti Laptop GPU, 4096 MiB, 591.74
+[ OK ] VRAM 4 GB >= required 4 GB
+[ OK ] Total RAM ~32 GB, free ~20 GB
+```
+
+If the summary line says `bge-m3 not pulled`, that's expected — fix it in step 3.
+
+### Step 3 — Pull the embedding model
+
+```powershell
+ollama pull bge-m3        # ~1.2 GB download, ~3-5 min
+ollama list               # verify: bge-m3:latest 1.2 GB
+```
+
+bge-m3 is a multilingual (PL + EN + 100+ languages) bi-encoder. In Q4 GGUF on Ollama it uses ~440 MB VRAM at inference time.
+
+### Step 4 — Start Qdrant
+
+```powershell
 docker compose -f docker\docker-compose.yml up -d
+```
 
-# 4. Install Python deps + warm up the reranker cache
+Verify:
+
+```powershell
+(Invoke-WebRequest http://localhost:6333/readyz -UseBasicParsing).Content
+# expected: "all shards are ready"
+```
+
+### Step 5 — Install Python deps + pre-warm the reranker
+
+```powershell
 uv sync --extra dev
-uv run python scripts\warmup.py    # one-time, ~500 MB ONNX download
-copy .env.example .env             # then edit corpus paths
+uv run python scripts\warmup.py     # ~500 MB ONNX download, cached for life
+```
 
-# 5. Start the server
+`warmup.py` pulls the cross-encoder reranker (jina-reranker-v2-base-multilingual ONNX, runs on CPU via fastembed) and probes Ollama. Run once per machine — first MCP / search call without warmup adds 30-60 s of one-time download which can time out Claude Desktop's stdio handshake.
+
+### Step 6 — Configure your corpus
+
+```powershell
+copy .env.example .env
+notepad .env
+```
+
+Edit at minimum:
+
+```env
+# Semicolon-separated (Windows convention)
+DRAFTS_PATHS=C:\Users\<USER>\dev\my-brand-drafts
+PROJECT_KNOWLEDGE_PATHS=C:\Users\<USER>\dev\my-projects
+```
+
+Paths can be empty for a smoke test — pass the path on the `POST /ingest` body instead.
+
+### Step 7 — Start the server
+
+```powershell
 uv run sdet-brain-server
 ```
 
-Detailed walkthrough: [docs/windows-setup.md](docs/windows-setup.md).
-If something doesn't work: [docs/troubleshooting.md](docs/troubleshooting.md).
+The server auto-creates the Qdrant collection on startup (idempotent, with retry/backoff to survive Qdrant container cold-start race).
+
+Verify in a second PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/health | ConvertTo-Json
+```
+
+Expected:
+
+```json
+{
+  "status": "ok",
+  "qdrant_ok": true,
+  "embedder_ok": true,
+  "embedder_provider": "ollama",
+  "vector_size": 1024,
+  "collection_count": 0
+}
+```
+
+### Step 8 — Smoke ingest + search
+
+```powershell
+# Make a test corpus (or point at your real Markdown tree)
+mkdir C:\Users\<USER>\dev\test-corpus -Force
+"# Hello world`n`nTest markdown for embedding." | Out-File C:\Users\<USER>\dev\test-corpus\hello.md -Encoding UTF8
+
+# Ingest
+$body = @{ path="C:\Users\<USER>\dev\test-corpus"; force=$true } | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8080/ingest -Method POST -Body $body -ContentType "application/json"
+# expect: chunks_created > 0
+
+# Search
+$body = @{ query="hello"; limit=2 } | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8080/search -Method POST -Body $body -ContentType "application/json"
+# expect: results array with score
+```
+
+**Performance benchmark on RTX 3050 Ti reference hardware:** 1042 chunks ingested from 6 markdown files (724 KB LinkedIn export) in **35.4 s ≈ 29 chunks/sec**.
+
+### Step 9 — Wire to Claude Code CLI
+
+If you use `claude` (Claude Code CLI), add the MCP entry to `~/.claude.json` via merge — DO NOT overwrite the file (it contains your sessions cache). Easiest:
+
+```powershell
+# Drop merge script
+python -c "
+import json, pathlib
+p = pathlib.Path.home() / '.claude.json'
+cfg = json.loads(p.read_text(encoding='utf-8'))
+cfg.setdefault('mcpServers', {})['sdet-brain'] = {
+  'command': r'C:\Users\<USER>\.local\bin\uv.exe',
+  'args': ['run', '--directory', r'C:\Users\<USER>\dev\sdet-brain-win', 'sdet-brain-mcp-stdio'],
+  'env': {
+    'EMBEDDING_PROVIDER': 'ollama',
+    'OLLAMA_HOST': 'http://localhost:11434',
+    'OLLAMA_EMBED_MODEL': 'bge-m3',
+    'QDRANT_URL': 'http://localhost:6333',
+    'RERANK_ENABLED': 'true',
+  },
+}
+p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding='utf-8')
+print('OK')
+"
+```
+
+Restart Claude Code (close all `claude` processes, open new terminal). Type `/mcp` in a Claude Code chat — `sdet-brain` should appear with all tools.
+
+### Step 10 — Wire to Claude Desktop
+
+**Limitation:** Claude Desktop MSIX (Microsoft Store version, Anthropic's current Windows distribution) does **not** currently load `claude_desktop_config.json` for local MCP servers. Tracking upstream for Store support.
+
+If you have the **classic standalone .exe** version of Claude Desktop, copy `examples\claude-desktop-mcp.json` to `%APPDATA%\Claude\claude_desktop_config.json` (substitute `<USER>`), tray Quit + reopen the app. The `search` tool should appear under the hammer icon in chat.
+
+### Step 11 — (Optional) Daily automation
+
+```powershell
+schtasks /Create /XML scripts\windows-task-scheduler.xml /TN sdet-brain-daily
+schtasks /Run /TN sdet-brain-daily   # test manual fire right now
+```
+
+`daily.py` runs Mon-Fri at 07:30 local time, only on AC power, only when at least 8 GB RAM free. It reuses the running server's HTTP `/ingest` endpoint (no second MLX/embedder process), takes a Qdrant snapshot to `.qdrant_backups/` (keep last 7), and emits a Windows toast notification on completion.
+
+Manual fire (any time):
+
+```powershell
+uv run python scripts\daily.py
+```
+
+---
+
+Detailed setup walkthrough: [docs/windows-setup.md](docs/windows-setup.md).
+Troubleshooting common issues: [docs/troubleshooting.md](docs/troubleshooting.md).
+Sync from upstream `darco81/sdet-brain`: [docs/upstream-sync.md](docs/upstream-sync.md).
 
 ## What was stripped from upstream
 
