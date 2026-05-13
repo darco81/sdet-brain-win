@@ -1,10 +1,16 @@
-# SDET Brain
+# SDET Brain — Windows (WIP fork)
 
-> Persistent RAG for a personal Markdown corpus. Shared context across Claude
-> Desktop, Claude Code, OpenCode, and other MCP clients - so handoff documents
-> between threads stop being a chore.
+> **🚧 This is a Windows-targeted fork of [`darco81/sdet-brain`](https://github.com/darco81/sdet-brain).**
+> Stripped MLX provider and LLM router. Uses Ollama + fastembed instead.
+> Reference hardware: **RTX 3050 4 GB VRAM**, 32 GB RAM, AMD 9800X3D, Windows 11.
+> See [`NOTICE.md`](NOTICE.md) for the relationship + sync workflow.
+> Status: pre-alpha, phase P1.2 in [implementation plan](https://app.clickup.com/9015353805/docs/8cnpred-415).
 
-[![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](CHANGELOG.md)
+Persistent RAG for a personal Markdown corpus. Shared context across Claude
+Desktop, Claude Code, and other MCP clients - so handoff documents between
+threads stop being a chore.
+
+[![Version](https://img.shields.io/badge/version-0.1.0--win.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-213_passing-success.svg)](#testing)
 [![License](https://img.shields.io/badge/license-Source--Available-yellow.svg)](LICENSE)
