@@ -40,9 +40,12 @@ ollama pull bge-m3
 # 3. Start Qdrant
 docker compose -f docker\docker-compose.yml up -d
 
-# 4. Install Python deps + start server
+# 4. Install Python deps + warm up the reranker cache
 uv sync --extra dev
-copy .env.example .env       # then edit corpus paths
+uv run python scripts\warmup.py    # one-time, ~500 MB ONNX download
+copy .env.example .env             # then edit corpus paths
+
+# 5. Start the server
 uv run sdet-brain-server
 ```
 
