@@ -36,6 +36,12 @@ e2e tests passing through Tailscale SSH session from upstream
 maintainer's Mac.
 
 ### Verified
+- **Claude Desktop Windows MSIX (1.7196.0.0) MCP integration**:
+  Settings → Developer → Edit Config opens the UWP-virtualised
+  `Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`.
+  After merging `mcpServers.sdet-brain` + tray-Quit + reopen,
+  the hammer icon shows `sdet-brain` with all tools. Live tested
+  by user on physical hardware.
 - `scripts/bootstrap.ps1` env check: all green (Docker, Ollama, uv,
   git, gh, Python 3.13, NVIDIA driver 591.74, VRAM 4 GB).
 - `ollama pull bge-m3` + GPU acceleration (1.2 GB model, 909-1109
@@ -72,18 +78,37 @@ maintainer's Mac.
   objects to `rerank()`, not bare strings (Sequence type required).
 
 ### Known Windows quirks documented
-- **Claude Desktop MSIX (Microsoft Store version)** does not
-  currently load `claude_desktop_config.json` for local MCP
-  servers. Works fine in **Claude Code CLI** which respects
-  `~/.claude.json` MCP entries. UWP sandbox restriction; pending
-  Anthropic support for local MCP in Store builds.
+- **Claude Desktop MSIX (Microsoft Store) — local MCP works after
+  config drop + FULL restart.** Initial confusion: drop into the
+  classic `%APPDATA%\Claude\claude_desktop_config.json` path is
+  silently virtualised to the UWP redirect at
+  `C:\Users\<USER>\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`.
+  After a reinstall, Claude Desktop overwrites this file and
+  drops the `mcpServers` key. **Re-merge after every reinstall.**
+  Plus close via tray-Quit (NOT window-close — close just hides
+  the app and leaves all 9 processes running, so the config never
+  reloads).
+- **Settings → Developer → Edit Config** in Claude Desktop Win
+  actually opens the UWP-redirected file (the path with
+  `Claude_pzs8sxrjxfjjc\LocalCache\...`). Use that path as the
+  authoritative location.
+- **Anthropic now also reads `~/.claude.json`** (the Claude Code
+  CLI config) and shares parts of it with Claude Desktop. Drop
+  `mcpServers.sdet-brain` into both for belt-and-suspenders
+  (the merge scripts in this repo do both).
+- **The `EBUSY` errors in `main.log`** are NOT about your MCP
+  server — they're Claude Desktop's bundled Claude Code Daemon
+  (CCD) downloading + spawning its own `claude.exe`. Ignore.
 - **Docker Desktop credential helper** fails in non-interactive
   SSH sessions (`error getting credentials - Określona sesja
-  logowania nie istnieje`). Pulling images requires an interactive
-  session first; container management afterwards works via SSH.
-- **Tailscale required** for remote test session — Asus router's
-  AP isolation blocks Mac→Windows direct LAN traffic even on the
-  same SSID (one-way: Win→Mac OK, Mac→Win blocked).
+  logowania nie istnieje`). First `docker pull` / `docker compose
+  up -d` must be run in an interactive session; container
+  management afterwards works via SSH.
+- **Tailscale required** for remote-test session from a different
+  machine — Asus routers' AP isolation often blocks
+  Mac→Windows direct LAN traffic even on the same SSID (one-way:
+  Win→Mac OK, Mac→Win blocked). Tailscale's WireGuard tunnel
+  bypasses LAN routing entirely.
 
 ### Performance baseline on RTX 3050 Ti 4 GB
 - bge-m3 Q4 GGUF resident in VRAM: ~440 MB on Ollama side.
