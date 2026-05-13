@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Verify the Windows environment is ready for sdet-brain-win.
 
@@ -61,7 +61,7 @@ if (Test-Cmd 'ollama') {
   $version = ollama --version 2>$null
   Write-OK "Ollama CLI installed ($version)"
 
-  # Probe the service over HTTP first — `ollama list` is misleading when the
+  # Probe the service over HTTP first - `ollama list` is misleading when the
   # service is stopped (returns nothing instead of erroring), which would
   # have us misreport "bge-m3 not pulled" when actually Ollama is down.
   $ollamaUp = $false
@@ -120,7 +120,7 @@ Write-Host ""
 Write-Host "Python"
 if (Test-Cmd 'python') {
   $py = python --version 2>$null
-  Write-OK "Python available ($py) — uv will manage 3.12 venv anyway"
+  Write-OK "Python available ($py) - uv will manage 3.12 venv anyway"
 } else {
   Write-Warn2 "python not on PATH (uv will install one when you run uv sync)"
 }
@@ -139,7 +139,7 @@ if (Test-Cmd 'nvidia-smi') {
       Write-Host "    $smi" -ForegroundColor DarkGray
       $vramRaw = (nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
       if ([string]::IsNullOrWhiteSpace($vramRaw)) {
-        Write-Warn2 "VRAM probe returned empty — skipping VRAM check"
+        Write-Warn2 "VRAM probe returned empty - skipping VRAM check"
         $problems += 'nvidia-smi-empty'
       } else {
         $vramMb = $vramRaw.Trim()
@@ -169,7 +169,7 @@ try {
   $totalGb = [math]::Round($osCim.TotalVisibleMemorySize / 1MB, 1)
   Write-OK "Total RAM ${totalGb} GB, free ${freeGb} GB"
   if ($freeGb -lt 8) {
-    Write-Warn2 "Less than 8 GB free — daily.py memory guard may skip runs."
+    Write-Warn2 "Less than 8 GB free - daily.py memory guard may skip runs."
   }
 } catch {
   Write-Warn2 "RAM probe failed: $_"
@@ -182,7 +182,7 @@ $drive = (Get-Item $PSScriptRoot).PSDrive
 $freeDiskGb = [math]::Round($drive.Free / 1GB, 1)
 Write-OK "Drive $($drive.Name): $freeDiskGb GB free"
 if ($freeDiskGb -lt 10) {
-  Write-Warn2 "Less than 10 GB free — Qdrant + snapshots may run out fast."
+  Write-Warn2 "Less than 10 GB free - Qdrant + snapshots may run out fast."
 }
 
 # --- Summary ---
