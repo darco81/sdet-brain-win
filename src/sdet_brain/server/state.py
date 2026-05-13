@@ -23,8 +23,8 @@ def build_default_state(settings: Settings | None = None) -> AppState:
     """Construct an `AppState` honouring the runtime settings.
 
     Each backend is constructed independently so a missing one (e.g.
-    Gemini API key, MLX unavailable) only disables that capability and
-    the surviving routes / tools keep serving.
+    Gemini API key absent, Ollama service down) only disables that
+    capability and the surviving routes / tools keep serving.
     """
     settings = settings or get_settings()
     state = AppState(settings=settings, storage=None, selection=None)

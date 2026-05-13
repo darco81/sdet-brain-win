@@ -58,23 +58,30 @@ if (Test-Cmd 'docker') {
 Write-Host ""
 Write-Host "Ollama"
 if (Test-Cmd 'ollama') {
+  $version = ollama --version 2>$null
+  Write-OK "Ollama CLI installed ($version)"
+
+  # Probe the service over HTTP first — `ollama list` is misleading when the
+  # service is stopped (returns nothing instead of erroring), which would
+  # have us misreport "bge-m3 not pulled" when actually Ollama is down.
+  $ollamaUp = $false
   try {
-    $version = ollama --version 2>$null
-    Write-OK "Ollama installed ($version)"
-    try {
-      $models = ollama list 2>$null
-      if ($models -match 'bge-m3') {
-        Write-OK "bge-m3 model pulled"
-      } else {
-        Write-Warn2 "bge-m3 not pulled. Run: ollama pull bge-m3"
-        $problems += 'ollama-bge-m3-missing'
-      }
-    } catch {
-      Write-Warn2 "ollama list failed: $_"
-    }
+    $tags = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 3 -ErrorAction Stop
+    $ollamaUp = $true
+    Write-OK "Ollama service reachable on localhost:11434"
   } catch {
-    Write-Fail "Ollama check failed: $_"
-    $problems += 'ollama-check-failed'
+    Write-Fail "Ollama service NOT reachable on localhost:11434. Open the Ollama app or run: ollama serve"
+    $problems += 'ollama-service-down'
+  }
+
+  if ($ollamaUp) {
+    $modelNames = @($tags.models | ForEach-Object { $_.name })
+    if ($modelNames -match 'bge-m3') {
+      Write-OK "bge-m3 model pulled"
+    } else {
+      Write-Warn2 "bge-m3 not pulled. Run: ollama pull bge-m3"
+      $problems += 'ollama-bge-m3-missing'
+    }
   }
 } else {
   Write-Fail "ollama CLI not found. Install: https://ollama.com/download/windows"
@@ -124,15 +131,26 @@ Write-Host "NVIDIA"
 if (Test-Cmd 'nvidia-smi') {
   try {
     $smi = nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>$null
-    Write-OK "nvidia-smi reachable"
-    Write-Host "    $smi" -ForegroundColor DarkGray
-    $vramMb = (nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1).Trim()
-    $vramGb = [math]::Floor([int]$vramMb / 1024)
-    if ($vramGb -ge $RequiredVramGb) {
-      Write-OK "VRAM ${vramGb} GB >= required ${RequiredVramGb} GB"
+    if ([string]::IsNullOrWhiteSpace($smi)) {
+      Write-Warn2 "nvidia-smi returned empty output (driver issue?)"
+      $problems += 'nvidia-smi-empty'
     } else {
-      Write-Warn2 "VRAM ${vramGb} GB is below recommended ${RequiredVramGb} GB"
-      $problems += 'vram-low'
+      Write-OK "nvidia-smi reachable"
+      Write-Host "    $smi" -ForegroundColor DarkGray
+      $vramRaw = (nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
+      if ([string]::IsNullOrWhiteSpace($vramRaw)) {
+        Write-Warn2 "VRAM probe returned empty — skipping VRAM check"
+        $problems += 'nvidia-smi-empty'
+      } else {
+        $vramMb = $vramRaw.Trim()
+        $vramGb = [math]::Floor([int]$vramMb / 1024)
+        if ($vramGb -ge $RequiredVramGb) {
+          Write-OK "VRAM ${vramGb} GB >= required ${RequiredVramGb} GB"
+        } else {
+          Write-Warn2 "VRAM ${vramGb} GB is below recommended ${RequiredVramGb} GB"
+          $problems += 'vram-low'
+        }
+      }
     }
   } catch {
     Write-Warn2 "nvidia-smi check failed: $_"

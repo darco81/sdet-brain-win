@@ -14,7 +14,9 @@ implements the same :class:`IEmbedder` protocol as the upstream Mac
 from __future__ import annotations
 
 import logging
+import socket
 from typing import Final
+from urllib.parse import urlparse
 
 import httpx
 
@@ -60,12 +62,17 @@ class OllamaEmbedder:
         self._batch_size = batch_size
         self._timeout = timeout_s
         self._vector_size: int | None = None
-        if client is not None:
-            self._client = client
-            self._owns_client = False
-        else:
+        # Client is lazy: a failed health_check shouldn't leave an
+        # httpx connection pool with sockets that the GC later flags
+        # as "Exception ignored". The first `embed()` materialises it.
+        self._injected_client = client
+        self._client: httpx.Client | None = client
+        self._owns_client = client is None
+
+    def _ensure_client(self) -> httpx.Client:
+        if self._client is None:
             self._client = httpx.Client(base_url=self._host, timeout=self._timeout)
-            self._owns_client = True
+        return self._client
 
     # ------------------------------------------------------------------
     # IEmbedder protocol
@@ -86,12 +93,13 @@ class OllamaEmbedder:
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
+        client = self._ensure_client()
         results: list[list[float]] = []
         for start in range(0, len(texts), self._batch_size):
             batch = texts[start : start + self._batch_size]
             payload = {"model": self._model_name, "input": batch}
             try:
-                resp = self._client.post("/api/embed", json=payload)
+                resp = client.post("/api/embed", json=payload)
                 resp.raise_for_status()
                 body = resp.json()
             except httpx.HTTPError as exc:
@@ -138,6 +146,20 @@ class OllamaEmbedder:
         return results
 
     def health_check(self) -> bool:
+        # Cheap TCP-level pre-check so a "service down" verdict doesn't
+        # have to spin up the httpx connection pool (which then leaks
+        # sockets via pytest's unraisable-exception detector during
+        # test teardown — see factory cleanup).
+        parsed = urlparse(self._host)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 11434
+        try:
+            with socket.create_connection((host, port), timeout=2.0):
+                pass
+        except OSError:
+            logger.info("Ollama unreachable at %s:%d (TCP precheck)", host, port)
+            return False
+
         try:
             output = self.embed(["sdet-brain health probe"])
         except Exception:
@@ -150,8 +172,9 @@ class OllamaEmbedder:
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        if self._owns_client:
+        if self._owns_client and self._client is not None:
             self._client.close()
+            self._client = None
 
     def __enter__(self) -> OllamaEmbedder:
         return self

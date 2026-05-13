@@ -176,7 +176,10 @@ def _post_ingest(server_url: str, path: str, logger: logging.Logger) -> tuple[bo
             resp = client.post(f"{server_url}/ingest", json=body)
             resp.raise_for_status()
             data = resp.json()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, ValueError) as exc:
+        # ValueError covers json.JSONDecodeError — server returned 200
+        # with malformed body, or a proxy returned HTML. Either way the
+        # ingest didn't happen and we shouldn't pretend it did.
         logger.error("ingest FAIL %s: %s", path, exc)
         return False, 0
     chunks = int(data.get("chunks_created", 0))

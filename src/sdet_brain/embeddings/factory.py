@@ -77,6 +77,16 @@ def _try_build(
         return None
     if not candidate.health_check():
         logger.warning("Provider %s failed health_check; will try fallback.", provider)
+        # OllamaEmbedder owns an httpx.Client that has live sockets after
+        # the failed health_check probe. If we just drop the reference we
+        # leak the connection until the GC runs (pytest flags this as
+        # PytestUnraisableExceptionWarning). Close explicitly.
+        close = getattr(candidate, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
         return None
     return candidate
 
