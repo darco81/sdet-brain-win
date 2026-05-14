@@ -451,11 +451,32 @@ Total resident memory ≈ ~1.5 GB RAM + ~440 MB VRAM at idle (after first embed 
 | `summarize_results` | _(stripped — depended on local LLM router)_ |
 | `get_chunk_neighbors` | Pull the chunk(s) adjacent to a hit when you need surrounding context. |
 | `list_sources` | Inspect what's indexed by source_type. |
+| `ingest_path` | Auto-detects markdown / image / PDF and routes to the right parser. |
+| `ingest_image` | Explicit image / PDF entrypoint (new in `0.2.0-win.0`) — DeepSeek-OCR via Ollama. |
 | `list_articles_by_status`, `search_voice_samples`, `search_smaczki`, `search_decisions`, `search_sprint_reports` | Domain-specific helpers (search with payload filters baked in). |
 
-7 tools total. The 3 LLM-bound ones were removed because Qwen3-Next-80B
+9 tools total. The 3 LLM-bound ones (`multi_query_search`,
+`query_rewrite`, `summarize_results`) were removed because Qwen3-Next-80B
 won't fit a 4 GB VRAM target. If you want decomposition or summarisation,
 do it client-side in Claude Desktop / Code (their host LLM handles it).
+
+### Image / PDF OCR (`0.2.0-win.0`)
+
+Drop receipt photos, scanned invoices, whiteboard snapshots, or
+multi-page PDFs into the watched corpus and they flow through OCR via
+the local Ollama daemon. Supported suffixes: `.jpg` / `.jpeg`, `.png`,
+`.webp`, `.heic` / `.heif`, `.bmp`, `.tiff` / `.tif`, `.pdf`.
+
+Default chain on Win (single tier):
+
+```
+1. ollama + deepseek-ocr     ~10-15 s/img on RTX 3050 Ti
+```
+
+Requires `ollama pull deepseek-ocr` on the host. Set
+`OCR_OLLAMA_FALLBACK_MODEL=<tag>` to wire a second model if your
+hardware has headroom; default is empty because qwen2.5-vl:32b
+doesn't fit a 4 GB VRAM target.
 
 ## Documentation
 

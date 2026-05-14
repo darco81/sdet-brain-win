@@ -28,6 +28,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-win.0] - 2026-05-14 - Image / PDF ingestion via Ollama OCR
+
+Sister release of Mac `v0.6.0`. Receipts, invoices, whiteboard
+photos, screenshots, and multi-page PDFs now flow through the same
+chunker → embedder → Qdrant path as markdown via a new OCR
+subsystem. The Win flagship runs a **single-tier Ollama chain** —
+DeepSeek-OCR as primary, optional secondary configurable via
+`OCR_OLLAMA_FALLBACK_MODEL`. No MLX-VLM (Apple Silicon only) and no
+qwen2.5-vl:32b default (won't fit 4 GB VRAM target).
+
+### Added
+
+- `src/sdet_brain/ocr/` - new module with `IOCREngine` protocol,
+  `OCRResult` dataclass, `OCRError` / `OCRTimeoutError` /
+  `OCRQualityError` hierarchy, single-tier Ollama factory walking the
+  primary then the optional fallback, and the shared `prompts` helpers
+  (DeepSeek grounding-token strip + repeat-line dedup + quality
+  heuristic).
+- `OllamaOCREngine` - HTTP provider over the local Ollama daemon.
+  Base64-encodes the image, honours `OCR_KEEP_ALIVE` so idle weights
+  unload after the configured window (protects 4 GB VRAM), separate
+  `OCRTimeoutError` on `httpx.ReadTimeout`.
+- `src/sdet_brain/ingestion/image_parser.py` - `parse_image` and
+  `parse_pdf` with EXIF transpose, HEIC support (pillow-heif), resize
+  to `OCR_MAX_IMAGE_DIM`, PDF page render via `pypdfium2`. Page
+  boundaries survive in chunker output as `## Page N` markdown
+  headings.
+- `ingest_image` MCP tool with explicit format list in its docstring
+  so Claude routes JPEG attachments correctly; `ingest_path` gains
+  parallel auto-detect.
+- 11 new `ocr_*` settings in `Settings` with field-level Pydantic
+  descriptions — provider, model ids (primary + optional fallback),
+  timeouts, image/PDF caps, keep-alive, quality threshold,
+  PII-scrub feature flag (off in MVP), grounding + general prompts.
+- Pipeline rename: `_iter_markdown_files` → `_iter_ingestible_files`
+  (markdown + image + pdf suffix set). `ingest_path` gains
+  `ocr_engine=` and `settings=` parameters; the
+  `maybe_build_ocr_engine` helper pre-scans the target so
+  markdown-only paths skip OCR-bootstrap cost entirely.
+
+### Tests
+
+- **216 tests** passing (was 166 in `0.1.0-win.2`, +50 in this
+  release): factory single-tier chain coverage, prompts pure-fn
+  coverage, OllamaOCREngine with monkeypatched `httpx`, image / PDF
+  parser with fake `pypdfium2` + `_FakeOCREngine`,
+  ingestible-suffix expansion, ingest tool input validation.
+- mypy `--strict` clean across 61 source files. ruff clean on new
+  and modified files.
+
+### Dependencies
+
+- `pillow>=10.0.0` (was transitive)
+- `pillow-heif>=0.17.0` for HEIC photos
+- `pypdfium2>=4.30.0` for PDF page rendering (no Poppler binary
+  required — ships its native lib)
+
+### Edge cases mitigated
+
+EXIF rotation on phone photos, HEIC auto-registration, PDF >20 pages
+rejected, image >20 MB rejected, concurrent-ingest race via
+`threading.Lock` in factory singleton, model-change idempotency via
+file-bytes `content_hash`, `OCR_KEEP_ALIVE=5m` unloads idle Ollama
+weights to free VRAM for the embedder.
+
+### Live smoke (deferred)
+
+Pending verification on the RTX 3050 Ti host. Requires
+`ollama pull deepseek-ocr` first; steps documented in
+`docs/CROSS-PLATFORM.md` (sync'd from Mac fork).
+
+### Backlog (post `0.2.0-win.0`)
+
+- **`0.3.0-win`**: dual-GPU CUDA — reranker offload to secondary card,
+  frees primary for OCR + bge-m3 coexistence.
+- **`0.3.0-win`**: PII scrub via local NER (Polish-specific entities
+  — NIP, kwoty, dane osobowe).
+
 ## [0.1.0-win.2] - 2026-05-14 (UTF-8 stdio fix + Claude Code config + project instructions)
 
 **Bug-fix release shipped same day as `0.1.0-win.1`.** During end-to-end
