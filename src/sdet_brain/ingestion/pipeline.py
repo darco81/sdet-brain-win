@@ -439,8 +439,14 @@ def ingest_path(
             document = _parse_one(
                 file_path, ocr_engine=ocr_engine, settings=settings,
             )
-            if is_image_path(file_path) or is_pdf_path(file_path):
-                source_type = "image-ocr"
+            # OCR documents tag themselves via frontmatter; markdown
+            # uses the path-heuristic classifier. Reading source_type
+            # from frontmatter keeps parser knowledge in one place
+            # (image_parser.py:_frontmatter) instead of duplicating
+            # the dispatch here.
+            fm_source_type = document.frontmatter.get("source_type")
+            if isinstance(fm_source_type, str):
+                source_type = fm_source_type
             else:
                 source_type = classify_source(file_path, config)
             cached = cached_hashes.get(str(file_path))
@@ -457,8 +463,11 @@ def ingest_path(
                 cached_hash=cached,
                 cached_hash_known=len(files) > 1,
             )
+        except (KeyboardInterrupt, MemoryError, SystemExit):
+            # Fatal: never silently swallow these.
+            raise
         except Exception as exc:
-            # Per-file failures must not abort the whole walk - record
+            # Per-file failures must not abort the whole walk — record
             # the error and keep going so a single malformed file does
             # not freeze a long ingest.
             logger.exception("Failed to ingest %s", file_path)
