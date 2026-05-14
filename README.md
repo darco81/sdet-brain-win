@@ -470,13 +470,32 @@ the local Ollama daemon. Supported suffixes: `.jpg` / `.jpeg`, `.png`,
 Default chain on Win (single tier):
 
 ```
-1. ollama + deepseek-ocr     ~10-15 s/img on RTX 3050 Ti
+1. ollama + deepseek-ocr     ~38-85 s/img on RTX 3050 Ti (measured)
 ```
 
-Requires `ollama pull deepseek-ocr` on the host. Set
-`OCR_OLLAMA_FALLBACK_MODEL=<tag>` to wire a second model if your
-hardware has headroom; default is empty because qwen2.5-vl:32b
+Requires `ollama pull deepseek-ocr` on the host (6.7 GB model).
+Set `OCR_OLLAMA_FALLBACK_MODEL=<tag>` to wire a second model if
+your hardware has headroom; default is empty because qwen2.5-vl:32b
 doesn't fit a 4 GB VRAM target.
+
+**Measured live on RTX 3050 Ti / 4 GB VRAM** (real Polish receipts,
+see `0.2.0-win.0` CHANGELOG entry for the full table):
+
+| Input | Per-image | Quality |
+|---|---|---|
+| Faktura PDF (digital text layer) | 52-57 s | full content, NIP / IBAN / addresses preserved |
+| HEIC paragon fiskalny (thermal photo) | ~84 s | ~80% — layout / shop name / NIP present; **amounts and dates missing** |
+| JPEG code screenshot | ~39 s | byte-perfect |
+
+The 6.7 GB model is mapped into 4 GB VRAM via Ollama's partial
+offload (rest in system RAM, CPU inference for offloaded layers).
+That's why per-image latency is 20× the Mac flagship (0.8-4.6 s).
+First call after warm-up adds ~30-60 s as Ollama loads the model
+from disk.
+
+**Known limitation:** receipt thermal-print photos lose small
+numeric fields (kwoty, daty). Regex stage 2 ported from Domowy
+Kombajn lands in `0.3.0-win`.
 
 ## Documentation
 
