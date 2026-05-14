@@ -93,11 +93,49 @@ rejected, image >20 MB rejected, concurrent-ingest race via
 file-bytes `content_hash`, `OCR_KEEP_ALIVE=5m` unloads idle Ollama
 weights to free VRAM for the embedder.
 
-### Live smoke (deferred)
+### Live smoke verified (2026-05-14, same-day)
 
-Pending verification on the RTX 3050 Ti host. Requires
-`ollama pull deepseek-ocr` first; steps documented in
-`docs/CROSS-PLATFORM.md` (sync'd from Mac fork).
+Verified on Julo's RTX 3050 Ti / 4 GB VRAM / Win 11 via Tailscale
+(Mac dev → desktop-1nhbvk3, SSH + scp + ollama on the box). Real
+Polish documents from Mac `~/Downloads`, transferred to Win
+`%TEMP%\sdet-smoke`, run through the real OCR factory (no mocks):
+
+| Document | Result | Per-image | Notes |
+|---|---|---|---|
+| `pro_forma_*.pdf` (faktura) | OK | 52 s | "Sprzedawca: DIT Dariusz Kowalski, NIP 1181599804" extracted |
+| `PA_3841_2026.pdf` (PURENERGY invoice) | OK | 57 s | NIP, IBAN, addresses preserved |
+| `IMG_0335.HEIC` (CCC paragon) | OK | 84 s | CCC MODUO S.A., Polkowice, www.ccc.eu — same ~80% quality as Mac |
+| `IMG_0982.jpeg` (code screenshot) | OK | 39 s | Playwright test code byte-perfect |
+| `IMG_0143.HEIC` (notebook page) | OCRQualityError | 26 s | 0 chars — model failed where Mac got 96 chars |
+
+**Measured per-image latency: 38-85 s** on RTX 3050 Ti — ~3-5×
+slower than the 10-15 s estimate in the original plan (revised). The
+6.7 GB `deepseek-ocr` model is mapped into 4 GB VRAM via Ollama's
+partial-offload (rest in system RAM, CPU inference for offloaded
+layers). This is **expected for the 4 GB target** and 20× slower
+than Mac MLX (0.8-4.6 s), but still usable for "ingest a receipt
+before dinner" workflow.
+
+Factory boot 0.4 s (HTTP health-check on `localhost:11434/api/tags`),
+first call adds ~30-60 s warm-up while Ollama loads the model from
+disk.
+
+### Known limitation — paragony fiskalne
+
+Physical receipt photos lose small numeric fields (kwoty, daty,
+prices per item) on the Ollama path same as on Mac MLX. **Regex
+stage 2** ported from Domowy Kombajn scheduled for `0.3.0-win`
+(Polish patterns `SUMA PLN`, `RAZEM`, `DO ZAPŁATY`, etc.). For
+v0.2.0-win.0 use `ingest_image` as a "what + where" tool; for "how
+much" rely on the manual frontmatter.
+
+### Win-specific gotcha (memory: reference_win_ollama_persistence)
+
+Windows OpenSSH kills child processes when SSH session closes — a
+plain `Start-Process ollama serve` from SSH doesn't survive across
+sessions. Persistent serving requires `schtasks` one-shot task or
+the Ollama tray-app autostart. Documented in
+`docs/CROSS-PLATFORM.md`.
 
 ### Backlog (post `0.2.0-win.0`)
 
