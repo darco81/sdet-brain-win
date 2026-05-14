@@ -1,6 +1,6 @@
 [project]
 name = "sdet-brain-win"
-version = "0.1.0.dev1"
+version = "0.1.0.dev2"
 description = "Windows + CUDA variant of sdet-brain. Stripped MLX provider and LLM router for 4 GB VRAM target."
 readme = "README.md"
 requires-python = ">=3.12"

@@ -74,6 +74,70 @@ Restart the container: `docker compose restart qdrant`.
   PATH visible to Claude Desktop. Claude Desktop **does not** load
   your shell rc files.
 
+## Claude Desktop returns garbled snippets / mojibake / "głupoty"
+
+Snippets quoted from the brain show `?` `�` `�?"` where em-dashes,
+Polish letters, or smart quotes should be — and the model
+hallucinates from the corrupted input.
+
+**Cause**: Python on Windows defaults `stdout` to **cp1252**. The
+MCP server emits JSON-RPC with `ensure_ascii=False`; non-ASCII bytes
+turn into mojibake before reaching Claude Desktop.
+
+**Fix** (`0.1.0-win.2` and later already include the code fix):
+1. `git pull origin windows-port` — version ≥ `0.1.0-win.2`.
+2. Add to your MCP config `env` block:
+   ```json
+   "PYTHONIOENCODING": "utf-8",
+   "PYTHONUTF8": "1"
+   ```
+3. Tray-Quit + reopen Claude Desktop.
+
+**Verify** (don't trust `Invoke-RestMethod` — it has a PS5.1 codepage
+bug; use `Invoke-WebRequest -OutFile` to inspect raw bytes):
+
+```powershell
+$body = @{limit=1; with_payload=$true} | ConvertTo-Json
+Invoke-WebRequest -Uri "http://localhost:6333/collections/sdet_brand_v1/points/scroll" `
+    -Method POST -ContentType "application/json" -Body $body -OutFile "$env:TEMP\q.bin"
+$bytes = [System.IO.File]::ReadAllBytes("$env:TEMP\q.bin")
+# em-dash UTF-8 sequence is E2 80 94 — count occurrences:
+$count = 0
+for ($i=0; $i -lt $bytes.Length-2; $i++) {
+    if ($bytes[$i] -eq 0xE2 -and $bytes[$i+1] -eq 0x80 -and $bytes[$i+2] -eq 0x94) { $count++ }
+}
+"Em-dashes in Qdrant raw: $count"
+```
+
+If Qdrant raw has em-dashes (>0) but Claude Desktop still mangles
+them, the MCP server itself is downgrading at stdio — confirm
+`PYTHONIOENCODING=utf-8` is in your config env block.
+
+## "Could not attach to MCP server sdet-brain" after a code update
+
+`uv run` rebuilds and reinstalls the editable wheel on the first
+spawn after any source change. A long-running `sdet-brain-server`
+(HTTP) process holds `.venv\Scripts\sdet-brain-server.exe` open,
+which makes the reinstall fail with `os error 32 — file in use`,
+and Claude Desktop's spawn dies before MCP handshake.
+
+```powershell
+.\scripts\update.ps1 -Force    # stops the HTTP server, then git pull + uv sync
+```
+
+Or manually: stop the HTTP server (Ctrl+C in its PowerShell window),
+let `uv sync` complete, then restart Claude Desktop.
+
+## PowerShell 5.1 `Invoke-RestMethod` corrupts UTF-8 when debugging
+
+When you pipe a JSON response through `Invoke-RestMethod | ConvertTo-Json`
+in PowerShell 5.1, em-dashes and Polish diacritics get re-encoded into
+mojibake **inside PowerShell**, not on the wire. This will lead you to
+falsely diagnose your server / Qdrant as broken.
+
+Always use `Invoke-WebRequest -OutFile` + `[System.IO.File]::ReadAllBytes()`
+to capture and inspect raw server bytes when debugging encoding.
+
 ## daily.py: permission denied writing log
 
 `%LOCALAPPDATA%\sdet-brain\daily.log` directory will be created on

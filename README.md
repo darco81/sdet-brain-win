@@ -7,7 +7,7 @@
 > See [`NOTICE.md`](NOTICE.md) for the fork relationship and
 > [docs/upstream-sync.md](docs/upstream-sync.md) for the sync workflow.
 
-[![Version](https://img.shields.io/badge/version-0.1.0--win.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.0--win.2-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Source--Available-yellow.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
@@ -28,7 +28,7 @@ Both 12 GB VRAM and 16 GB VRAM machines are happily supported too —
 
 ## Status
 
-**Live-verified on 2026-05-14** — Intel i5 11th gen / 32 GB RAM / RTX 3050 Ti 4 GB VRAM / Windows 11. End-to-end pipeline (ingest → embed → store → search → daily automation → snapshots) passes on the reference target hardware. See [CHANGELOG.md](CHANGELOG.md) `0.1.0-win.1` for the full verification list.
+**Live-verified on 2026-05-14 (`0.1.0-win.2`)** — Intel i5 11th gen / 32 GB RAM / RTX 3050 Ti 4 GB VRAM / Windows 11. End-to-end pipeline (ingest → embed → store → search → daily automation → snapshots) passes on the reference target hardware. `0.1.0-win.2` ships a **critical UTF-8 stdio fix for the MCP server** — without it Claude Desktop on Windows shows garbled snippets (mojibake) for any content containing em-dashes, Polish diacritics, or smart quotes. macOS users are unaffected. See [CHANGELOG.md](CHANGELOG.md) for the full verification list.
 
 ## Onboarding — full walkthrough
 
@@ -196,6 +196,8 @@ cfg.setdefault('mcpServers', {})['sdet-brain'] = {
   'command': r'C:\Users\<USER>\.local\bin\uv.exe',
   'args': ['run', '--directory', r'C:\Users\<USER>\dev\sdet-brain-win', 'sdet-brain-mcp-stdio'],
   'env': {
+    'PYTHONIOENCODING': 'utf-8',
+    'PYTHONUTF8': '1',
     'EMBEDDING_PROVIDER': 'ollama',
     'OLLAMA_HOST': 'http://localhost:11434',
     'OLLAMA_EMBED_MODEL': 'bge-m3',
@@ -209,6 +211,8 @@ print('OK')
 ```
 
 Restart Claude Code (close all `claude` processes, open new terminal). Type `/mcp` in a Claude Code chat — `sdet-brain` should appear with all tools.
+
+> Alternative path: create `%USERPROFILE%\.claude\mcp_servers.json` directly from `examples\claude-code-mcp.json` (substitute `<USER>` first). Both layouts are read by Claude Code; pick whichever matches your existing setup.
 
 ### Step 10 — Wire to Claude Desktop (Windows MSIX)
 
@@ -224,6 +228,8 @@ This is the **UWP-virtualised** version of `%APPDATA%\Claude\claude_desktop_conf
 
 **Drop merge (PowerShell, preserves existing `preferences` if Claude already created the file):**
 
+> **The `PYTHONIOENCODING` / `PYTHONUTF8` env vars below are mandatory on Windows.** Without them Claude Desktop will receive corrupted snippet text (em-dashes, Polish diacritics, smart quotes turning into `?` or `�`) and the model will hallucinate nonsense from the garbage. `0.1.0-win.2`'s `mcp_stdio.py` already calls `sys.stdout.reconfigure(encoding="utf-8")` at start, but keeping these env vars in the config is belt-and-suspenders + survives any future regression.
+
 ```powershell
 # Save script to temp, run, cleanup
 @'
@@ -234,6 +240,8 @@ cfg.setdefault('mcpServers', {})['sdet-brain'] = {
     'command': r'C:\Users\<USER>\.local\bin\uv.exe',
     'args': ['run', '--directory', r'C:\Users\<USER>\dev\sdet-brain-win', 'sdet-brain-mcp-stdio'],
     'env': {
+        'PYTHONIOENCODING': 'utf-8',
+        'PYTHONUTF8': '1',
         'EMBEDDING_PROVIDER': 'ollama',
         'OLLAMA_HOST': 'http://localhost:11434',
         'OLLAMA_EMBED_MODEL': 'bge-m3',
@@ -279,6 +287,85 @@ Manual fire (any time):
 ```powershell
 uv run python scripts\daily.py
 ```
+
+---
+
+## Verify your install (90-second smoke)
+
+After Step 7 (server running on `:8080`):
+
+```powershell
+# 1) Health check — must all be true / non-empty
+Invoke-RestMethod http://localhost:8080/health | ConvertTo-Json
+# expected: status=ok, embedder_ok=True, qdrant_ok=True, vector_size=1024
+
+# 2) Ingest a polish + em-dash test file
+"# Polski test`n`nDziałanie em-dashem: ąęć — żźń." | Out-File `
+    C:\Users\<USER>\dev\test-corpus\encoding-smoke.md -Encoding UTF8
+$body = @{ path="C:\Users\<USER>\dev\test-corpus"; force=$true } | ConvertTo-Json
+Invoke-RestMethod -Uri http://localhost:8080/ingest -Method POST `
+    -Body $body -ContentType "application/json"
+
+# 3) DIRECT Qdrant scroll — bypass our server to confirm bytes survived ingest
+$body = @{limit=1; with_payload=$true} | ConvertTo-Json
+Invoke-WebRequest -Uri "http://localhost:6333/collections/sdet_brand_v1/points/scroll" `
+    -Method POST -ContentType "application/json" -Body $body `
+    -OutFile $env:TEMP\qdrant_raw.bin
+$bytes = [System.IO.File]::ReadAllBytes("$env:TEMP\qdrant_raw.bin")
+$emDash = 0
+for ($i = 0; $i -lt $bytes.Length - 2; $i++) {
+    if ($bytes[$i] -eq 0xE2 -and $bytes[$i+1] -eq 0x80 -and $bytes[$i+2] -eq 0x94) {
+        $emDash++
+    }
+}
+"Em-dashes found in Qdrant raw bytes: $emDash  (must be > 0)"
+```
+
+If em-dashes ARE found in step 3, the data is clean. If Claude Desktop **still** shows garbled snippets after that, the MCP stdio layer is the culprit — confirm your config has `PYTHONIOENCODING=utf-8` in the `env` block + `0.1.0-win.2` code (`mcp_stdio.py` contains `_force_utf8_streams()`).
+
+> **Don't** use `Invoke-RestMethod` to inspect server JSON when debugging encoding. PowerShell 5.1 has a known UTF-8 round-trip bug in `Invoke-RestMethod` → object → `ConvertTo-Json` that *itself* corrupts bytes. Always use `Invoke-WebRequest -OutFile` + `[System.IO.File]::ReadAllBytes()` for ground-truth byte inspection.
+
+## Troubleshooting
+
+### "Claude Desktop returns nonsense / głupoty when I search the brain"
+
+**Symptom**: Snippets come back with `?` or `�` where em-dashes / Polish letters should be, OR the model fabricates citations that don't match the corpus.
+
+**Cause**: Python on Windows defaults `stdout` to **cp1252** (Windows-1252). The MCP server writes JSON-RPC with `ensure_ascii=False`, so any non-ASCII byte (em-dash `\xe2\x80\x94`, Polish `ą` `\xc4\x85`, smart quote, bullet) gets re-encoded by Windows into mojibake before reaching Claude Desktop. The model then "hallucinates" off corrupted input.
+
+**Fix**:
+1. Pull latest fork (`git pull origin windows-port`) — version ≥ `0.1.0-win.2` has `_force_utf8_streams()` in `mcp_stdio.py`.
+2. Add to your MCP config `env` block:
+   ```json
+   "PYTHONIOENCODING": "utf-8",
+   "PYTHONUTF8": "1"
+   ```
+3. Tray-Quit + reopen Claude Desktop (a window-close doesn't reload config).
+
+Verify: re-run the [Verify your install](#verify-your-install-90-second-smoke) snippet above. If raw Qdrant has em-dashes but Claude Desktop still doesn't, the MCP-server config is missing the env vars.
+
+### "Could not attach to MCP server sdet-brain" right after a code update
+
+**Cause**: `uv run` rebuilds and **reinstalls** the editable wheel on the first spawn after any source change. If you have a long-running `sdet-brain-server` (HTTP) process holding `.venv\Scripts\sdet-brain-server.exe` open, the reinstall fails with `os error 32 — file in use`, and Claude Desktop's spawn dies before MCP handshake.
+
+**Fix**:
+```powershell
+.\scripts\update.ps1 -Force    # stops the HTTP server, then runs git pull + uv sync
+```
+Or manually: stop the HTTP server (Ctrl+C in its PowerShell window), wait for `uv sync` to complete in any pending window, then restart Claude Desktop.
+
+### "Claude Desktop's hammer icon doesn't show sdet-brain at all"
+
+Check, in order:
+1. **Right config path?** Open `Settings → Developer → Edit Config` — that's the file Claude Desktop reads. Confirm your `mcpServers.sdet-brain` block lives there. The Windows MSIX path is `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`, NOT `%APPDATA%\Claude\...`.
+2. **Full restart?** Tray icon → right-click → Quit, then reopen. Window-close doesn't reload config.
+3. **MCP log present?** Open `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\logs\mcp.log` and tail the last 30 lines. If you see `MCP Server connection requested for: sdet-brain`, the config was read. If not, the file is still wrong.
+4. **`uv.exe` absolute path?** Claude Desktop spawns subprocesses without inheriting your `PATH`. Use the full `C:\Users\<USER>\.local\bin\uv.exe`, not just `uv` or `uv.exe`.
+5. **Server attaches but immediately disconnects?** Tail `logs\mcp-server-sdet-brain.log`. The Python subprocess's stderr lands there — `pip` install failures, ImportError, port-bind conflicts, Ollama unreachable all show up. Usually one of: Ollama not running, Qdrant container not started, lingering `sdet-brain-server.exe` holding the venv lock (see previous gotcha).
+
+### "I get `EBUSY` errors in `main.log`"
+
+Those are Claude Desktop's bundled Claude Code Daemon (CCD) spawning its own `claude.exe`. They are NOT about your MCP server. Look for `MCP Server connection requested for: sdet-brain` instead.
 
 ---
 

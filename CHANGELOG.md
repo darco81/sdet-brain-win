@@ -28,6 +28,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-win.2] - 2026-05-14 (UTF-8 stdio fix + Claude Code config + project instructions)
+
+**Bug-fix release shipped same day as `0.1.0-win.1`.** During end-to-end
+verification on the reference RTX 3050 Ti machine, Claude Desktop on
+Windows returned garbled snippets ("głupoty") even though direct HTTP
+`/search` to the same server returned clean results. Root cause:
+Python on Windows defaults `sys.stdout` to **cp1252**; FastMCP serialises
+tool results with `ensure_ascii=False`, so any chunk containing
+em-dashes, Polish diacritics, smart quotes, or non-ASCII characters hit
+Claude Desktop as mojibake. The model then "hallucinates" off corrupted
+input because the data on the wire literally isn't English/Polish
+anymore — it's `\x97\x3f\x22` instead of `\xe2\x80\x94`.
+
+macOS users were unaffected (Python default stdout = UTF-8). Linux too.
+
+### Fixed
+- **`src/sdet_brain/server/mcp_stdio.py`** — added `_force_utf8_streams()`
+  invoked at the top of `main()` before any logging or state setup.
+  `sys.stdout`, `sys.stderr`, `sys.stdin` reconfigure to
+  `encoding="utf-8", errors="replace"` so the entire JSON-RPC payload
+  is UTF-8 regardless of the platform default codepage.
+- **`examples/claude-desktop-mcp.json`** + **`examples/claude-code-mcp.json`**:
+  added `"PYTHONIOENCODING": "utf-8"` and `"PYTHONUTF8": "1"` to the
+  `env` block. Belt-and-suspenders: even if a future commit removes the
+  `reconfigure()` call, the spawned Python interpreter still defaults
+  to UTF-8 thanks to PEP 540.
+
+### Added
+- **`CLAUDE.md`** — project-level instructions for Claude Desktop +
+  Claude Code on when and how to use the sdet-brain MCP server.
+  Covers: when to query (past decisions, voice samples, projects),
+  available tools, default search recipe, voice-matching guidance,
+  honest signals (top score < 0.5 → admit you didn't find it),
+  and the actual corpus layout on the reference machine.
+  Both clients respect the file.
+
+### Verified (the actual debugging trail)
+- Direct **Qdrant raw scroll** API on `localhost:6333/collections/sdet_brand_v1/points/scroll`
+  returns chunks with **4 em-dashes correctly encoded as UTF-8 bytes
+  `E2 80 94`** and **zero replacement chars `EF BF BD`**. Ingest
+  pipeline + storage are clean — source `.md` files are UTF-8, all
+  Python file reads use `encoding="utf-8"`, the bytes survive into
+  Qdrant intact.
+- **MCP stdio handshake** on the patched server: 564-byte
+  `initialize` response captured raw via Python subprocess with
+  `stdin=PIPE`. **Zero replacement chars** in the raw byte stream
+  (down from N>0 before the fix). Search responses now ship em-dashes
+  verbatim.
+- **Live verification by Dariusz** on the target Windows hardware:
+  Claude Desktop attached after restart, returns sensible answers
+  cited with file paths instead of garbled snippet quotes.
+- **Diagnostic note**: PowerShell 5.1 `Invoke-RestMethod | ConvertTo-Json`
+  itself corrupts UTF-8 when round-tripping JSON (known PS5.1 codepage
+  bug). When verifying server output from a PowerShell session, use
+  `Invoke-WebRequest -OutFile` + `[System.IO.File]::ReadAllBytes()`
+  to inspect raw bytes — not `Invoke-RestMethod`. Cost me 20 min of
+  fake-alarm "the corpus is broken" mid-debug.
+
+### Known Windows quirks (added)
+- **First spawn after a code change takes 2-10s longer** because
+  `uv run` rebuilds + reinstalls the editable wheel before launching
+  the entry point. If Claude Desktop times out the initial MCP
+  handshake (~5 s default), restart Claude Desktop a second time —
+  the wheel is now cached and the spawn is sub-second.
+- **HTTP server holds a write-lock on `.venv\Scripts\sdet-brain-server.exe`**.
+  If you have `uv run sdet-brain-server` running in one window and
+  try to `uv run sdet-brain-mcp-stdio` (e.g. via Claude Desktop)
+  while a `uv sync` is pending, you'll see `error: failed to remove
+  file ... Proces nie może uzyskać dostępu do pliku (os error 32)`.
+  Stop the HTTP server first, let `uv sync` finish, then restart.
+  `scripts/update.ps1 -Force` automates this.
+
+### Roadmap (post 0.1.0-win.2)
+- **0.1.0-win.3**: structured logging (`structlog`), Prometheus
+  `/metrics` endpoint, exemplar Grafana dashboard JSON.
+- **0.2.0-win**: ingestion watcher Windows service via NSSM; replaces
+  the Task Scheduler XML for users who want continuous ingest.
+- **0.3.0-win**: dual-GPU CUDA support (RTX 3050 Ti + secondary card)
+  for reranker offload to second GPU when present.
+
 ## [0.1.0-win.1] - 2026-05-14 (Verified live on Windows)
 
 **First live verification on physical Windows hardware** (Intel i5 11th
