@@ -28,6 +28,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1-win.0] - 2026-05-14 - OCR hardening (sister patch of Mac v0.6.1)
+
+Same-day post-launch hardening porting the Mac v0.6.1 review fixes
+to the Windows fork. Twelve high-confidence findings (multi-reviewer
+hits) fixed across the factory, providers, parser, and pipeline. No
+public API breaks; one type semantic correction (`OCRError(Exception)`
+instead of `RuntimeError`).
+
+### Fixed
+
+- **`OCRError(RuntimeError)` → `OCRError(Exception)`** — domain error
+  taxonomy correction.
+- **`factory._try_build` chain leak** — was catching only `OCRError`;
+  unexpected exceptions (`httpx.ConnectError`, `ImportError`,
+  `OSError`, `MemoryError`) crashed the whole chain instead of
+  falling back to the next link. Now `logger.exception(...)` plus
+  fallthrough. Same fix applied to `health_check()` raises.
+- **`OllamaOCREngine.health_check` opacity** — exception detail now
+  in the log so the operator can tell daemon-down from
+  proxy-misconfig from 5xx. `httpx.InvalidURL` caught separately so
+  a malformed `OCR_OLLAMA_HOST` env var fails clean.
+- **`image_parser._normalize_image_bytes` alpha-loss** — RGBA / LA /
+  palette-with-transparency images now composite onto white before
+  `convert("RGB")` instead of leaking alpha as a black void.
+- **`image_parser` PIL exception translation** —
+  `UnidentifiedImageError` and `DecompressionBombError` now wrap into
+  `OCRError` with actionable messages.
+- **`pipeline.ingest_path` blanket `except Exception`** —
+  `MemoryError` / `KeyboardInterrupt` / `SystemExit` now re-raise;
+  domain errors stay per-file diagnostics.
+- **`ingest_image` MCP tool docstring** matches actual behavior.
+- **`pipeline` source_type** read from frontmatter instead of being
+  hardcoded by the dispatcher.
+
+### Tests
+
+- **241 tests** passing (was 216, +25 hardening-driven). mypy
+  `--strict` clean across 61 source files. ruff clean on all
+  new + modified files.
+- New: `tests/ingestion/test_pipeline_dispatch.py` —
+  `maybe_build_ocr_engine` + fatal-vs-recoverable categorization.
+- Extended: factory (taxonomy + builder unexpected exception +
+  health_check raise + reset_ocr_engine), ollama (4xx/5xx + non-JSON
+  + trailing-slash URL + health-check exception detail), image_parser
+  (RGBA/LA/P/CMYK modes + zero-page PDF + PIL exception
+  translation).
+
+### Won't fix in 0.2.1-win.0 (deferred)
+
+- `OCREngineSelection.attempted` named-tuple refactor — punted to
+  0.3.0-win.
+- Receipt amount/date regex stage 2 (port from Domowy Kombajn) —
+  separate PR / 0.2.2-win.0+.
+
 ## [0.2.0-win.0] - 2026-05-14 - Image / PDF ingestion via Ollama OCR
 
 Sister release of Mac `v0.6.0`. Receipts, invoices, whiteboard
