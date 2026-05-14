@@ -1,6 +1,6 @@
 [project]
 name = "sdet-brain-win"
-version = "0.1.0.dev2"
+version = "0.2.0.dev0"
 description = "Windows + CUDA variant of sdet-brain. Stripped MLX provider and LLM router for 4 GB VRAM target."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,6 +24,9 @@ dependencies = [
     "fastembed>=0.4",
     "psutil>=5.9",
     "windows-toasts>=1.1.0 ; sys_platform == 'win32'",
+    "pillow>=10.0.0",
+    "pillow-heif>=0.17.0",
+    "pypdfium2>=4.30.0",
 ]
 
 [project.optional-dependencies]
@@ -75,7 +78,7 @@ strict_equality = true
 extra_checks = true
 
 [[tool.mypy.overrides]]
-module = ["frontmatter.*", "watchdog.*"]
+module = ["frontmatter.*", "watchdog.*", "pillow_heif.*", "pypdfium2.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
