@@ -13,6 +13,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EmbeddingProvider = Literal["ollama", "gemini"]
+OCRProvider = Literal["ollama"]
 
 
 class Settings(BaseSettings):
@@ -134,6 +135,82 @@ class Settings(BaseSettings):
     # Windows fork: LLM digest is disabled by design. 4 GB VRAM target can't
     # fit even a small Qwen LLM alongside the embedder. Use a separate
     # external service (e.g. Gemini API utility) if you need digests later.
+
+    # --- OCR (0.2.0-win.0) ---
+    ocr_provider: OCRProvider = Field(
+        default="ollama",
+        description=(
+            "Primary OCR backend. Win flagship: ``ollama`` only — MLX-VLM "
+            "is Apple Silicon, dropped from this fork."
+        ),
+    )
+    ocr_ollama_primary_model: str = Field(
+        default="deepseek-ocr",
+        description="Ollama model tag used as the primary OCR model.",
+    )
+    ocr_ollama_fallback_model: str | None = Field(
+        default=None,
+        description=(
+            "Optional secondary Ollama model. Defaults to ``None`` because "
+            "the 4 GB VRAM target cannot fit qwen2.5-vl:32b (~22 GB) — set "
+            "to a lighter model name if your hardware has headroom."
+        ),
+    )
+    ocr_timeout_seconds: int = Field(
+        default=120,
+        ge=1,
+        description="Wall-clock cap for a single OCR call before ``OCRTimeoutError``.",
+    )
+    ocr_max_image_dim: int = Field(
+        default=1600,
+        ge=64,
+        description="Resize budget — long edge clamped to this many pixels before OCR.",
+    )
+    ocr_max_image_bytes: int = Field(
+        default=20_000_000,
+        ge=1,
+        description="Hard ceiling on input image size; bigger payloads are rejected.",
+    )
+    ocr_max_pdf_pages: int = Field(
+        default=20,
+        ge=1,
+        description="Hard ceiling on PDF page count; longer documents are rejected.",
+    )
+    ocr_keep_alive: str = Field(
+        default="5m",
+        description=(
+            "Ollama ``keep_alive`` directive — how long the model stays "
+            "loaded after the last request. Short on Win to release "
+            "the limited 4 GB VRAM between calls."
+        ),
+    )
+    ocr_quality_min_chars: int = Field(
+        default=50,
+        ge=0,
+        description=(
+            "Below this character count (after grounding-token strip) the "
+            "provider raises ``OCRQualityError`` and the factory tries the "
+            "next link in the fallback chain."
+        ),
+    )
+    ocr_pii_scrub: bool = Field(
+        default=False,
+        description=(
+            "Feature flag for post-OCR PII scrubbing. Off in MVP; hook "
+            "reserved for 0.3.0-win."
+        ),
+    )
+    ocr_grounding_prompt: str = Field(
+        default="<|grounding|>Convert the document to markdown.",
+        description="Prompt fed to DeepSeek-OCR variants — uses the grounding token.",
+    )
+    ocr_general_prompt: str = Field(
+        default=(
+            "Extract all text from this image and return it as markdown. "
+            "Preserve layout and structure."
+        ),
+        description="Prompt fed to general VLMs that lack the grounding token.",
+    )
 
 
 def parse_path_list(value: str) -> list[str]:
