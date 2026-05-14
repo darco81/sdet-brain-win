@@ -34,6 +34,9 @@ from sdet_brain.server.tools.get_chunk_neighbors import (
     get_chunk_neighbors as get_chunk_neighbors_tool,
 )
 from sdet_brain.server.tools.ingest import ingest_path as ingest_path_tool
+from sdet_brain.server.tools.ingest_image import (
+    ingest_image as ingest_image_tool,
+)
 from sdet_brain.server.tools.list_sources import list_sources as list_sources_tool
 from sdet_brain.server.tools.search import search as search_tool
 
@@ -91,14 +94,39 @@ def build_mcp(state_getter: StateGetter | None = None) -> FastMCP:
 
     @mcp.tool
     def ingest_path(path: str, force: bool = False) -> str:
-        """Re-ingest a Markdown file or directory into the brain.
+        """Re-ingest a file or directory into the brain.
+
+        Auto-detects content type and routes accordingly:
+
+        - ``.md`` → markdown parser + chunker
+        - ``.jpg``/``.png``/``.heic``/``.webp``/``.bmp``/``.tiff`` → OCR
+          via the configured Ollama vision-model chain
+        - ``.pdf`` → page-by-page render + OCR
 
         Use this when the user wants to refresh the index after editing
-        a file by hand or after dropping a new note in the corpus. Set
-        ``force=true`` to bypass the content-hash cache.
+        a file by hand, dropping a new note, or saving a receipt photo.
+        Set ``force=true`` to bypass the content-hash cache.
         """
         state = _require_state(state_getter())
         return ingest_path_tool(state, path=path, force=force)
+
+    @mcp.tool
+    def ingest_image(path: str, force: bool = False) -> str:
+        """Ingest an image or PDF (NOT for markdown — use ``ingest_path``).
+
+        Supports JPEG, PNG, WebP, HEIC/HEIF, BMP, TIFF, and PDF. Each
+        image is OCR'd via the configured Ollama provider chain. On
+        Windows the default is single-tier (DeepSeek-OCR); a secondary
+        Ollama model can be wired via ``OCR_OLLAMA_FALLBACK_MODEL`` if
+        the hardware can fit one.
+
+        Use this when the user attaches a receipt photo, scanned
+        invoice, whiteboard snapshot, or multi-page PDF and wants it
+        searchable. Set ``force=true`` to bypass the content-hash
+        cache.
+        """
+        state = _require_state(state_getter())
+        return ingest_image_tool(state, path=path, force=force)
 
     @mcp.tool
     def list_sources(source_type: str | None = None) -> str:
