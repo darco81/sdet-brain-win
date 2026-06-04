@@ -7,7 +7,7 @@
 > See [`NOTICE.md`](NOTICE.md) for the fork relationship and
 > [docs/upstream-sync.md](docs/upstream-sync.md) for the sync workflow.
 
-[![Version](https://img.shields.io/badge/version-0.1.0--win.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.1--win.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Source--Available-yellow.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
@@ -504,15 +504,6 @@ Kombajn lands in `0.3.0-win`.
 * **[docs/upstream-sync.md](docs/upstream-sync.md)** — how to pull bug fixes from `darco81/sdet-brain` without losing the strip.
 * **[NOTICE.md](NOTICE.md)** — fork relationship, license attribution.
 * **[CHANGELOG.md](CHANGELOG.md)** — version history starting from `0.1.0-win.0`.
-
-## Status
-
-**Pre-alpha.** Code committed and unit-tested on macOS. First live
-Windows verification happens on an i5 11gen / 32 GB RAM / RTX 3050 Ti
-4 GB box. Expect a handful of fixup commits after that test run.
-
-ClickUp implementation plan: `SDET Brand → SDET Brain Win` folder
-(private). 61 subtasks across phases P0–P6 with dependencies.
 
 ## License
 
