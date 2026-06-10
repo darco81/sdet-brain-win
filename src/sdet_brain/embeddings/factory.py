@@ -12,6 +12,7 @@ Ollama is down.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -63,9 +64,7 @@ _BUILDERS: dict[EmbeddingProvider, EmbedderBuilder] = {
 }
 
 
-def _try_build(
-    provider: EmbeddingProvider, settings: Settings
-) -> IEmbedder | None:
+def _try_build(provider: EmbeddingProvider, settings: Settings) -> IEmbedder | None:
     builder = _BUILDERS.get(provider)
     if builder is None:
         logger.warning("Provider %s is not registered in this build.", provider)
@@ -83,10 +82,8 @@ def _try_build(
         # PytestUnraisableExceptionWarning). Close explicitly.
         close = getattr(candidate, "close", None)
         if callable(close):
-            try:
+            with contextlib.suppress(Exception):
                 close()
-            except Exception:
-                pass
         return None
     return candidate
 

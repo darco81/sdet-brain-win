@@ -57,9 +57,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             if delay:
                 await asyncio.sleep(delay)
             try:
-                init_collections(
-                    state.storage, vector_size=state.embedder.vector_size
-                )
+                init_collections(state.storage, vector_size=state.embedder.vector_size)
                 logger.info(
                     "Collection ready (vector_size=%d, provider=%s, attempt=%d)",
                     state.embedder.vector_size,
@@ -103,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The state-getter resolves at call time because the FastAPI app
     # is constructed below.
     app_holder: dict[str, FastAPI] = {}
+
     def _state_getter() -> object:
         host = app_holder.get("app")
         if host is None:

@@ -53,6 +53,7 @@ def build_mcp(state_getter: StateGetter | None = None) -> FastMCP:
     tools). Tool calls in that mode raise a clear runtime error.
     """
     if state_getter is None:
+
         def state_getter() -> AppState | None:  # pragma: no cover - default fallback
             return None
 
@@ -237,16 +238,12 @@ def build_mcp(state_getter: StateGetter | None = None) -> FastMCP:
         queries are easy.
         """
         state = _require_state(state_getter())
-        return search_sprint_reports_tool(
-            state, query=query, project=project, limit=limit
-        )
+        return search_sprint_reports_tool(state, query=query, project=project, limit=limit)
 
     return mcp
 
 
 def _require_state(state: AppState | None) -> AppState:
     if state is None:
-        raise RuntimeError(
-            "SDET Brain MCP tools have no AppState - check the server lifespan."
-        )
+        raise RuntimeError("SDET Brain MCP tools have no AppState - check the server lifespan.")
     return state
