@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
@@ -91,7 +92,15 @@ def test_batching_splits_into_chunks_of_batch_size() -> None:
     assert calls == [3, 3, 1]
 
 
-def test_health_check_returns_true_when_probe_succeeds() -> None:
+def test_health_check_returns_true_when_probe_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # health_check() does a real socket.create_connection TCP precheck before
+    # the HTTP probe; stub it so the test stays hermetic (no live Ollama).
+    monkeypatch.setattr(
+        "sdet_brain.embeddings.ollama_provider.socket.create_connection",
+        lambda *args, **kwargs: contextlib.nullcontext(),
+    )
     embedder = OllamaEmbedder(client=_make_client(_ok_handler()))
     assert embedder.health_check() is True
 
