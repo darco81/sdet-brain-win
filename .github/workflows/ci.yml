@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [windows-port, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - name: ruff check
+        run: uv run ruff check src tests
+      - name: ruff format --check
+        run: uv run ruff format --check src tests
+      - name: mypy strict
+        run: uv run mypy src tests
+
+  # Linux leg runs the full suite against a real Qdrant so the storage
+  # integration tests execute instead of skipping.
+  test-linux:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.17.1
+        ports:
+          - 6333:6333
+    env:
+      QDRANT_URL: http://localhost:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:6333/readyz; then echo "qdrant ready"; exit 0; fi
+            sleep 1
+          done
+          echo "Qdrant did not become ready" >&2
+          exit 1
+      - name: pytest (with Qdrant)
+        run: uv run pytest -q
+
+  # Windows is the fork's target platform. Service containers are not
+  # available on Windows runners, so the Qdrant-backed storage tests skip
+  # here by design; this leg proves the offline suite + Windows-specific
+  # code (UTF-8 stdio guard, watcher, toasts) runs on the real OS.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - name: pytest (offline)
+        run: uv run pytest -q
