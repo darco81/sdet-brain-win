@@ -196,8 +196,7 @@ class Settings(BaseSettings):
     ocr_pii_scrub: bool = Field(
         default=False,
         description=(
-            "Feature flag for post-OCR PII scrubbing. Off in MVP; hook "
-            "reserved for 0.3.0-win."
+            "Feature flag for post-OCR PII scrubbing. Off in MVP; hook reserved for 0.3.0-win."
         ),
     )
     ocr_grounding_prompt: str = Field(

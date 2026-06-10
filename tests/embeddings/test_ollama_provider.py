@@ -11,7 +11,6 @@ import pytest
 from sdet_brain.embeddings.ollama_provider import OllamaEmbedder
 from sdet_brain.embeddings.protocol import EmbeddingError, IEmbedder
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ def _ok_handler(
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/embed"  # noqa: S101
+        assert request.url.path == "/api/embed"
         body = json.loads(request.content)
         inputs = body["input"]
         count = vectors_per_call if vectors_per_call is not None else len(inputs)
