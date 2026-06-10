@@ -116,3 +116,44 @@ own material.
   CHANGELOG.md (with caveats), examples/templates/*.yaml
 
 ## Phase 2-5 atomic steps follow this audit
+
+---
+
+## Incident: orphaned PII tags on public origin (2026-06-10)
+
+**Found during the 2026-06-10 dual review.** The branch histories
+(`windows-port`, `main`) were clean after the PII filter-rewrite, but three
+**release tags** on the public origin still pointed at *pre-scrub* commits,
+re-exposing the scrubbed data to anyone who fetched the tag:
+
+| Tag | Pre-scrub (leaking) commit | PII files |
+| --- | --- | --- |
+| `0.2.0-win.0` | `cc36493` | 4 |
+| `0.2.1-win.0` | `9d4f5a2` | 5 |
+| `v0.1.0-win.2` | `cac6706` | 4 |
+
+The filter-rewrite had produced clean local equivalents
+(`c9f76c5` / `337d857` / `16bbc4a3`, all reachable from `windows-port`,
+0 PII hits) but the original `git fetch` refused to clobber the local tags,
+so origin was never updated.
+
+**Remediation (done):** force-pushed the clean local tags over the leaking
+ones — origin tags now dereference to the scrubbed commits. The old objects
+are no longer reachable from any ref (orphaned) but remain fetchable by raw
+SHA until GitHub garbage-collects unreachable objects.
+
+**Follow-up — GitHub Support request (send from the repo owner account):**
+
+> Subject: Request garbage collection of unreachable commits (PII removal)
+>
+> Repository: darco81/sdet-brain-win
+>
+> I force-updated three tags (0.2.0-win.0, 0.2.1-win.0, v0.1.0-win.2) to
+> remove personal data. The previous tag targets are now unreachable from any
+> ref but the commits (cc36493, 9d4f5a2, cac6706) are still retrievable by
+> SHA. Please run garbage collection / purge the unreachable objects and
+> invalidate any cached views of those commits. The repo has no forks.
+
+**Process fix:** the PII grep-gate (`sdet-brain-win-replacements.txt` patterns)
+must run over **all refs incl. tags**, not just the working tree — wired into
+pre-commit + CI as part of the public-release checklist.
