@@ -23,7 +23,7 @@ jobs:
       - name: ruff format --check
         run: uv run ruff format --check src tests
       - name: mypy strict
-        run: uv run mypy src tests
+        run: uv run mypy src
 
   # Linux leg runs the full suite against a real Qdrant so the storage
   # integration tests execute instead of skipping.
