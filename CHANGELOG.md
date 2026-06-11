@@ -26,6 +26,36 @@ deliberately strips the upstream MLX stack — see
 
 ## [Unreleased]
 
+## [0.3.0-win.0] - 2026-06-11 - CI, upstream parity, sync mechanism fix
+
+### Added
+- CI pipeline (GitHub Actions: ruff + ruff-format + mypy strict + pytest on a
+  `[ubuntu-latest, windows-latest]` matrix — the Windows leg runs the offline
+  suite on the real target OS), pre-commit hooks, and Dependabot.
+- `search` CLI ported from upstream (`sdet-brain-cli search` + the
+  `sdet-brain-ingest` / `sdet-brain-search` entry points).
+- ADR `docs/adr/0001-repo-architecture.md` and a working patch-port upstream
+  sync workflow (the two repos have disjoint histories — `git merge` cannot
+  run; documented `git diff | git apply --3way`).
+- Home-path PII gate (`scripts/check_no_pii.sh`, CI + pre-commit).
+
+### Fixed
+- Ported the upstream shared-layer fixes: SourceConfig threaded through server
+  ingest (no more `unknown` on re-ingest), cross-encoder reranker wired into
+  the MCP `search` tool, `min_score` applied on the hybrid path, and the Gemini
+  fallback (`gemini-embedding-001` + `output_dimensionality` + dim guard).
+- QdrantStorage built with `check_compatibility=False` (kills the flaky probe
+  thread that failed the Windows CI leg).
+- Lint + format drift; ruff pinned; mypy scoped to `src` (matches pre-commit).
+- Lifespan tests made hermetic; the repo-wide warning ignore removed.
+- Orphaned release tags that leaked pre-scrub PII replaced on the public remote.
+
+### Changed
+- Version scheme to PEP 440 local label (`0.3.0+win.0`); `__version__` +
+  FastAPI version from package metadata; `license = { file = "LICENSE" }`.
+- Docs swept for accuracy (corpus-path separator, Claude Code MCP wiring,
+  scripts/README, CHANGELOG highlights, `.env.example` OCR block).
+
 ## [0.2.1-win.0] - 2026-05-14 - OCR hardening (sister patch of Mac v0.6.1)
 
 Same-day post-launch hardening porting the Mac v0.6.1 review fixes
