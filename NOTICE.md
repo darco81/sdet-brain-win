@@ -13,11 +13,16 @@ Both repositories are maintained by the same author. This fork exists because th
 
 ## What was stripped from upstream
 
-- `src/sdet_brain/embeddings/mlx_provider.py` — MLX-specific, Apple Silicon only
+- `src/sdet_brain/embeddings/mlx_provider.py`, `src/sdet_brain/ocr/mlx_vlm_provider.py` — MLX, Apple Silicon only
 - `src/sdet_brain/llm/` — LLM router (Qwen3-Next-80B doesn't fit 4 GB VRAM)
+- `src/sdet_brain/server/chat/`, `server/routes/chat.py`, `cli/chat_repl.py` — chat surface (needs the LLM router)
+- `server/tools/{multi_query,query_rewrite,summarize_results}.py` — LLM-backed MCP tools
+- `cli/templates.py`, `cli/templates_cli.py` — saved-query templates
 - `scripts/daily.sh`, `scripts/healthcheck.sh`, `scripts/digest.py` — bash + macOS-specific
-- launchd plist examples
-- `mlx-embeddings`, `mlx-lm` dependencies in `pyproject.toml`
+- `mlx-embeddings`, `mlx-lm`, `mlx-vlm` dependencies in `pyproject.toml`
+
+The authoritative, regenerable list lives in
+[`docs/upstream-sync.md`](docs/upstream-sync.md).
 
 ## What was added or replaced
 
@@ -28,12 +33,11 @@ Both repositories are maintained by the same author. This fork exists because th
 
 ## Upstream sync workflow
 
-```bash
-git fetch upstream
-git merge upstream/main
-# Conflicts on mlx_provider.py / llm/ / scripts/daily.sh:
-# resolve as "deleted by us" — we intentionally don't want those back
-```
+The two repos have **disjoint git histories** (the pre-publication PII
+rewrite removed the common ancestor), so `git merge upstream/main` does
+not work. Sync is done by **patch-port** — see
+[`docs/upstream-sync.md`](docs/upstream-sync.md) and
+[`docs/adr/0001-repo-architecture.md`](docs/adr/0001-repo-architecture.md).
 
 Only fixes touching cross-platform parts (server, MCP, Qdrant client, ingest pipeline) need real review. Provider-layer divergence is intentional.
 
