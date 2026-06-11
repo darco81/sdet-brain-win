@@ -1,10 +1,10 @@
 [project]
 name = "sdet-brain-win"
-version = "0.2.1+win.0"
+version = "0.3.0+win.0"
 description = "Windows + CUDA variant of sdet-brain. Stripped MLX provider and LLM router for 4 GB VRAM target."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "Source-Available" }
+license = { file = "LICENSE" }
 authors = [{ name = "Dariusz Kowalski", email = "darek@sdet.it" }]
 keywords = ["rag", "mcp", "qdrant", "embeddings", "fastapi"]
 

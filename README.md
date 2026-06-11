@@ -7,7 +7,7 @@
 > See [`NOTICE.md`](NOTICE.md) for the fork relationship and
 > [docs/upstream-sync.md](docs/upstream-sync.md) for the sync workflow.
 
-[![Version](https://img.shields.io/badge/version-0.2.1--win.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0--win.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-Source--Available-yellow.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#status)
