@@ -126,15 +126,4 @@ minversion = "8.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-ra --strict-markers --strict-config"
-filterwarnings = [
-    "error",
-    # PytestUnraisableExceptionWarning fires when an httpx.Client owned
-    # by a provider that failed health_check gets GC'd with a connection
-    # still in the pool. We close explicitly in factory cleanup, but if
-    # the test machine happens to have a live service on the probed
-    # port (e.g. dev Mac with local Ollama running) the close races with
-    # the socket teardown. The behaviour is harmless on production
-    # Windows targets where the failing path is "connection refused"
-    # before any socket is established.
-    "ignore::pytest.PytestUnraisableExceptionWarning",
-]
+filterwarnings = ["error"]
