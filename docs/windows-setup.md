@@ -58,8 +58,9 @@ This creates `.venv\` and installs everything from `pyproject.toml`.
 
 ## 4. Configure the corpus paths
 
-Copy `.env.example` to `.env` and edit the path variables. On Windows
-use **semicolon `;`** as the separator:
+Copy `.env.example` to `.env` and edit the path variables. Use
+**comma `,`** as the separator for multiple roots (the path parser
+splits on comma on every platform):
 
 ```env
 EMBEDDING_PROVIDER=ollama
@@ -117,17 +118,21 @@ brand corpus (~5000 chunks) usually takes 2-4 minutes on RTX 3050 Ti.
 ## 8. Wire it to Claude Desktop or Claude Code
 
 **Important:** the example configs run `sdet-brain-mcp-stdio` (the
-stdio MCP transport). Claude Desktop and Claude Code talk MCP over
-stdio, **not** over HTTP. Don't confuse this with `sdet-brain-server`
-(the HTTP daemon used by `daily.py` and manual /ingest calls).
+stdio MCP transport). These examples use stdio; Claude Code also
+supports an HTTP transport, but stdio is simplest for a local server.
+Don't confuse this with `sdet-brain-server` (the HTTP daemon used by
+`daily.py` and manual /ingest calls).
 
 Copy `examples\claude-desktop-mcp.json` into
 `%APPDATA%\Claude\claude_desktop_config.json` (replace placeholders),
 fully quit and reopen Claude Desktop. The `search` tool should
 appear in chat.
 
-For Claude Code CLI: copy `examples\claude-code-mcp.json` into
-`%USERPROFILE%\.claude\mcp_servers.json` and restart Claude Code.
+For Claude Code CLI, merge the server block from
+`examples\claude-code-mcp.json` into the `mcpServers` object in
+`%USERPROFILE%\.claude.json` (Claude Code does **not** read a
+`mcp_servers.json` file), or run `claude mcp add`. See README Step 9
+for the exact JSON. Restart Claude Code afterwards.
 
 ## 9. (Optional) Daily automation
 

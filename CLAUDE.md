@@ -77,20 +77,21 @@ Match the brand:
   is down, fall back to general knowledge and warn me.
 - Always cite source files when quoting from the corpus.
 
-## Quick reference — corpus structure on this machine
+## Quick reference — corpus structure (example)
+
+Point the brain at a folder of Markdown and index it. A typical brand
+corpus looks like:
 
 ```
-C:\Users\<USER>\dev\real-corpus\          # what's currently indexed
-├── linkedin-posts-2026-05-13.md         # voice samples (LinkedIn posts I wrote)
-├── linkedin-comments-2026-05-13.md      # voice samples (comments)
-├── linkedin-articles-2026-05-13.md      # long-form pieces
-├── linkedin-recommendations-2026-05-13.md  # received + given
-├── linkedin-skills-stats-2026-05-13.md  # endorsements snapshot
-└── linkedin-network-insights-2026-05-13.md  # aggregated network stats
+<your-corpus-dir>\            # set via the *_PATHS env vars in .env
+├── linkedin-posts-*.md       # voice samples (posts)
+├── linkedin-articles-*.md    # long-form pieces
+├── drafts\                   # work-in-progress
+└── ...                       # any other .md
 ```
 
-To extend the corpus: drop more `.md` into the folder, then call
-`scripts/daily.py` (or wait for the 07:30 scheduled run).
+To extend the corpus: drop more `.md` into a configured folder, then run
+`scripts/daily.py` (or wait for the scheduled Task Scheduler run).
 
 ## Server location + status
 
