@@ -5,26 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Project highlights
+## Project highlights (Windows fork)
 
-- **6 sprints** between 2026-04-30 and 2026-05-01 - Tier 1 MVP
-  through Tier 5 DX.
-- **213 tests** passing; mypy --strict + ruff clean across 70 source
-  files.
-- **2906+ chunks** indexed across the brand corpus + the brain's own
-  README / CHANGELOG / sprint reports.
-- **11 MCP tools** (5 core + 5 domain + 3 LLM-backed) plus a REST
-  API with SSE streaming on `/chat`.
-- **Top-tier 2026 stack**: Qwen3-Embedding-8B-4bit-DWQ (MTEB 70.58)
-  with MRL truncation to 1024, hybrid dense + BM25 fused via RRF,
-  cross-encoder reranking, tiered local MLX LLMs (gemma-4-26B fast /
-  Qwen3-Next-80B Instruct + Thinking), multi-query agentic
-  retrieval.
-- **Daily ergonomics**: `sdet-brain-chat` REPL, inline `[N]`
-  citations with structured Source panel, `sdet-brain run`
-  templates with Jinja2 substitution.
-- **Zero cloud dependencies, zero API keys** for the core flow.
-  Gemini stays available as a typed fallback for VPS deploys.
+This is the Windows + CUDA fork tuned for a 4 GB VRAM target. It
+deliberately strips the upstream MLX stack — see
+[`NOTICE.md`](NOTICE.md) and
+[`docs/upstream-sync.md`](docs/upstream-sync.md).
+
+- **11 MCP tools**: `ping` + 5 core (`search`, `ingest_path`,
+  `ingest_image`, `list_sources`, `get_chunk_neighbors`) + 5 domain
+  helpers. The 3 LLM-backed upstream tools and the `/chat` surface are
+  not carried (no local LLM on 4 GB VRAM).
+- **Retrieval stack**: Ollama `bge-m3` dense embeddings + BM25 fused via
+  RRF, with a CPU cross-encoder reranker (fastembed, no VRAM cost).
+- **OCR**: image / PDF ingestion via Ollama DeepSeek-OCR (4 GB-friendly).
+- **Verified on real Windows hardware** (RTX 3050 Ti 4 GB) and in CI on a
+  `windows-latest` runner.
+- **Local-first**: Ollama + Qdrant, no API keys for the core flow; Gemini
+  stays available as a typed cloud fallback for embeddings.
 
 ## [Unreleased]
 
