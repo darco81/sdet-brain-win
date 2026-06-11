@@ -7,25 +7,22 @@ backends are missing.
 
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 
 from sdet_brain.config import Settings
 from sdet_brain.server.app import _build_state, create_app
 
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_build_state_does_not_crash_when_qdrant_unreachable() -> None:
-    # qdrant-client launches a background compatibility probe that will
-    # fail when the URL has no listener; the warning is harmless for
-    # this test.
+    # QdrantStorage is built with check_compatibility=False, so an
+    # unreachable URL spawns no background probe thread and does not crash
+    # state construction. The embedder is stubbed (see conftest), so the
+    # selection is deterministically present rather than service-dependent.
     settings = Settings(qdrant_url="http://127.0.0.1:1")
     state = _build_state(settings)
     assert state.storage is not None
-    # The embedder selection either succeeds (whichever provider is
-    # locally available) or surfaces a clear error; we just need the
-    # state to be constructed without exceptions.
-    assert state.selection is not None or state.embedder_error is not None
+    assert state.selection is not None
+    assert state.embedder_error is None
 
 
 def test_app_starts_and_serves_health_under_degraded_lifespan() -> None:
