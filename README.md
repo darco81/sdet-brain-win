@@ -128,9 +128,11 @@ notepad .env
 Edit at minimum:
 
 ```env
-# Semicolon-separated (Windows convention)
+# Comma-separated (parse_path_list splits on comma on every platform)
 DRAFTS_PATHS=C:\Users\<USER>\dev\my-brand-drafts
 PROJECT_KNOWLEDGE_PATHS=C:\Users\<USER>\dev\my-projects
+# Multiple roots for one source_type:
+# DRAFTS_PATHS=C:\a\drafts,C:\b\more-drafts
 ```
 
 Paths can be empty for a smoke test — pass the path on the `POST /ingest` body instead.
@@ -455,10 +457,12 @@ Total resident memory ≈ ~1.5 GB RAM + ~440 MB VRAM at idle (after first embed 
 | `ingest_image` | Explicit image / PDF entrypoint (new in `0.2.0-win.0`) — DeepSeek-OCR via Ollama. |
 | `list_articles_by_status`, `search_voice_samples`, `search_smaczki`, `search_decisions`, `search_sprint_reports` | Domain-specific helpers (search with payload filters baked in). |
 
-9 tools total. The 3 LLM-bound ones (`multi_query_search`,
-`query_rewrite`, `summarize_results`) were removed because Qwen3-Next-80B
-won't fit a 4 GB VRAM target. If you want decomposition or summarisation,
-do it client-side in Claude Desktop / Code (their host LLM handles it).
+11 tools total (`ping` + `search`, `ingest_path`, `ingest_image`,
+`list_sources`, `get_chunk_neighbors`, plus the 5 domain helpers). The
+3 LLM-bound upstream tools (`multi_query_search`, `query_rewrite`,
+`summarize_results`) are not carried because Qwen3-Next-80B won't fit a
+4 GB VRAM target. If you want decomposition or summarisation, do it
+client-side in Claude Desktop / Code (their host LLM handles it).
 
 ### Image / PDF OCR (`0.2.0-win.0`)
 
