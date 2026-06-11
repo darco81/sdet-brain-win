@@ -2158,7 +2158,7 @@ wheels = [
 
 [[package]]
 name = "sdet-brain-win"
-version = "0.2.1.dev0"
+version = "0.2.1+win.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
