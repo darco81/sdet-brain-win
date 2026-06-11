@@ -1,119 +1,145 @@
 # Upstream sync workflow
 
-This repo is a **one-way downstream fork** of
+This repo is a **downstream fork** of
 [`darco81/sdet-brain`](https://github.com/darco81/sdet-brain) (the
-Apple Silicon flagship). Bug fixes and improvements that touch
-cross-platform code (server, MCP, Qdrant, ingest pipeline) should
-flow from upstream into this fork; provider-layer divergence is
-intentional and stays here.
+Apple Silicon flagship). Cross-platform fixes (server, MCP, Qdrant,
+ingest pipeline, sparse/reranker) flow from upstream into this fork;
+provider-layer divergence is intentional and stays here.
+
+> **Important:** the two repos have **disjoint git histories**. The
+> pre-publication PII history rewrite removed the common ancestor, so
+> `git merge upstream/main` fails with *"refusing to merge unrelated
+> histories"* and **does not work**. Sync is done by **patch-port**, not
+> merge/rebase. See [`adr/0001-repo-architecture.md`](adr/0001-repo-architecture.md).
 
 ## One-time setup
 
-```powershell
-cd C:\Users\<USER>\dev\sdet-brain-win
-git remote add upstream https://github.com/darco81/sdet-brain.git
-git remote -v
-# origin    git@...:<owner>/sdet-brain-win.git   (fetch)
-# origin    git@...:<owner>/sdet-brain-win.git   (push)
-# upstream  https://github.com/darco81/sdet-brain.git  (fetch)
-# upstream  https://github.com/darco81/sdet-brain.git  (push)
-```
+Clone both repos as siblings:
 
-## Pulling upstream changes
+```
+dev/
+├── sdet-brain/        # upstream (read-only mirror; pull, never push)
+└── sdet-brain-win/    # this fork
+```
 
 ```powershell
-# Make sure your working tree is clean.
-git status
-
-# Fetch and merge upstream/main into local main.
-git checkout main
-git fetch upstream
-git merge upstream/main
-
-# Now rebase your feature branch on top of new main.
-git checkout windows-port
-git rebase main
+cd ..\sdet-brain
+git pull            # keep the upstream mirror current
 ```
 
-## Resolving expected conflicts
+## Porting an upstream change
 
-The strip commit deleted several upstream files. When upstream
-modifies any of them, you'll see merge/rebase conflicts marked
-**"deleted by us"**.
-
-Resolve every such conflict the same way — keep it deleted:
+Pick the upstream range to port (e.g. the last synced tag → the new
+tag), diff it for the **shared paths only**, and 3-way-apply it here:
 
 ```powershell
-git rm src/sdet_brain/embeddings/mlx_provider.py
-git rm src/sdet_brain/llm/router.py
-# ... etc for each "deleted by us" file
-git rebase --continue
+cd ..\sdet-brain-win
+
+# Diff upstream across the range, restricted to cross-platform surfaces,
+# then apply with 3-way merge so local context is respected.
+git -C ..\sdet-brain diff vX.Y.Z..vA.B.C -- `
+  src/sdet_brain/server `
+  src/sdet_brain/storage `
+  src/sdet_brain/ingestion `
+  src/sdet_brain/embeddings/factory.py `
+  src/sdet_brain/embeddings/sparse_embedder.py `
+  src/sdet_brain/embeddings/reranker.py `
+  src/sdet_brain/ocr/factory.py `
+  src/sdet_brain/ocr/protocol.py `
+  src/sdet_brain/ocr/prompts.py `
+  src/sdet_brain/config.py `
+  tests/server tests/storage tests/ingestion tests/ocr `
+  | git apply --3way --reject
 ```
 
-The full list of files this fork intentionally doesn't carry:
+Resolve any `*.rej` hunks by hand (they appear where this fork already
+diverges), then run the gates:
+
+```powershell
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run mypy src
+uv run pytest -q
+```
+
+For a single targeted fix, port one file:
+
+```powershell
+git -C ..\sdet-brain diff <sha>~1..<sha> -- src/sdet_brain/storage/qdrant_client.py `
+  | git apply --3way
+```
+
+## Files this fork intentionally does NOT carry
+
+Regenerate this list any time with:
+
+```powershell
+# mac-only src + tests = the strip surface
+git -C ..\sdet-brain ls-files src tests > ..\mac.txt
+git ls-files src tests > .\win.txt
+# diff mac.txt against win.txt; mac-only entries are the strip surface
+```
+
+As of 2026-06-11 (regenerated from the real tree diff):
 
 ```
+# MLX / Apple-Silicon only
 src/sdet_brain/embeddings/mlx_provider.py
-src/sdet_brain/llm/                                  (entire dir)
+src/sdet_brain/ocr/mlx_vlm_provider.py
+tests/embeddings/test_mlx_provider.py
+tests/ocr/test_mlx_vlm_provider.py
+
+# Local LLM router + chat (Qwen3-Next-80B doesn't fit 4 GB VRAM)
+src/sdet_brain/llm/                       (entire dir: __init__, factory, mlx_provider, protocol, router)
+src/sdet_brain/server/chat/               (entire dir: __init__, models, pipeline, prompt_template)
+src/sdet_brain/server/routes/chat.py
 src/sdet_brain/server/tools/multi_query.py
 src/sdet_brain/server/tools/query_rewrite.py
 src/sdet_brain/server/tools/summarize_results.py
-src/sdet_brain/server/chat/                          (entire dir)
-src/sdet_brain/server/routes/chat.py
 src/sdet_brain/cli/chat_repl.py
-scripts/daily.sh
-scripts/healthcheck.sh
-scripts/digest.py
-tests/llm/                                            (entire dir)
-tests/embeddings/test_mlx_provider.py
-tests/server/test_{chat,llm_tools,multi_query}.py
+src/sdet_brain/cli/templates.py
+src/sdet_brain/cli/templates_cli.py
+tests/llm/                                (entire dir)
+tests/server/test_chat.py
+tests/server/test_llm_tools.py
+tests/server/test_multi_query.py
 tests/cli/test_chat_repl.py
+tests/cli/test_templates.py
+
+# macOS scripts (replaced by Windows equivalents)
+scripts/daily.sh, scripts/healthcheck.sh, scripts/digest.py, launchd plists
 ```
 
-## What to actually merge
+**Port candidates (NOT intentionally stripped — just not synced yet):**
 
-Cherry-pick rather than full-merge when in doubt. Good candidates:
+```
+src/sdet_brain/cli/search_cli.py    # pure cross-platform; port it
+src/sdet_brain/cli/main_cli.py      # dispatcher for the search subcommand
+tests/cli/test_search_cli.py
+```
 
-* Server route bug fixes (e.g. `routes/health.py`, `routes/ingest.py`).
-* Qdrant client patches (`storage/qdrant_client.py`).
-* Ingest pipeline improvements (`ingestion/pipeline.py`,
-  `ingestion/chunker.py`).
-* MCP tool fixes that don't depend on LLM (`server/tools/search.py`,
-  `server/tools/list_sources.py`, `server/tools/ingest.py`,
-  `server/tools/get_chunk_neighbors.py`, `server/tools/domain/*`).
-* fastembed reranker / sparse embedder updates.
-* Tests for any of the above.
+## Upstreaming (downstream → upstream)
 
-Skip:
+Cross-platform fixes must land **upstream first**, then be ported down —
+never downstream-only. This fork currently carries three improvements
+that should be upstreamed:
 
-* Anything under `embeddings/mlx_provider.py` or `llm/`.
-* `chat/` REPL surface.
-* MLX-specific scripts.
-* Settings fields named `mlx_*` or `llm_*` (they no longer exist here).
+- `server/app.py` — `init_collections` startup retry with backoff.
+- `server/mcp_stdio.py` — UTF-8 stdio guard (also valuable on upstream).
+- `embeddings/factory.py` — close provider client on failed health-check.
 
-## When the merge gets large
-
-If upstream and downstream diverge significantly (e.g. a v0.6.0 with
-big refactors), a clean **3-way replay** is often nicer than a giant
-merge commit:
-
-1. `git checkout main` → up to date with `upstream/main`.
-2. `git checkout -b windows-port-vN` (fresh branch).
-3. `git cherry-pick <strip-commit>` from the previous Windows port.
-4. `git cherry-pick <ollama-provider-commit>`, etc.
-5. Resolve any new conflicts caused by upstream renames.
-
-Push `windows-port-vN` as the new active branch and retire
-`windows-port-vM`.
+Keep shared modules **byte-identical to upstream** except where a line is
+platform-functional; cosmetic drift (docstring rewording, function
+reordering) guarantees future port conflicts.
 
 ## Releasing after a sync
 
-After a successful merge or replay, bump the version and tag:
+Use a PEP 440-compatible version (see the release-hygiene task):
 
 ```powershell
-# Edit pyproject.toml: version = "0.1.0.dev1" → "0.1.1.dev0" (or whatever)
-# Edit CHANGELOG.md to add the new entry.
-git commit -am "chore: bump to 0.1.0-win.1 after upstream vX.Y.Z sync"
-git tag v0.1.0-win.1
-git push --tags
+# pyproject.toml: version = "0.2.1+win.0"   (local label; sorts == 0.2.1)
+# CHANGELOG.md: add the entry.
+git commit -am "chore: release 0.2.2+win.0 after upstream vA.B.C port"
+git tag v0.2.2-win.0
+git push origin v0.2.2-win.0
 ```
