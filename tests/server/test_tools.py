@@ -18,7 +18,9 @@ from qdrant_client.models import PointStruct, SparseVector
 
 from sdet_brain.config import Settings
 from sdet_brain.embeddings.factory import EmbedderSelection
+from sdet_brain.embeddings.reranker import RerankCandidate, RerankResult
 from sdet_brain.ingestion.pipeline import ingest_path as run_ingest
+from sdet_brain.ingestion.source_classifier import build_source_config
 from sdet_brain.server.dependencies import AppState
 from sdet_brain.server.tools.get_chunk_neighbors import get_chunk_neighbors
 from sdet_brain.server.tools.ingest import ingest_path
@@ -148,6 +150,94 @@ def test_search_filters_by_source_type(
     )
     assert "draft.md" in drafts_only
     assert "article.md" not in drafts_only
+
+
+def test_ingest_tool_classifies_under_configured_root(
+    storage: QdrantStorage, collection: str, tmp_path: Path
+) -> None:
+    # Regression (ported from upstream): a frontmatter-less markdown file under
+    # a configured drafts root must be tagged 'drafts', not 'unknown'. The
+    # server ingest tool used to drop SourceConfig.
+    drafts_dir = tmp_path / "drafts"
+    drafts_dir.mkdir()
+    file_path = drafts_dir / "notes.md"
+    file_path.write_text("# Notes\n\n" + ("body alpha " * 30), encoding="utf-8")
+
+    settings = Settings(drafts_paths=str(drafts_dir))
+    selection = EmbedderSelection(
+        embedder=_FakeEmbedder(),  # type: ignore[arg-type]
+        provider="ollama",
+        fell_back=False,
+        attempted=("ollama",),
+    )
+    state = AppState(
+        settings=settings,
+        storage=storage,
+        selection=selection,
+        source_config=build_source_config(settings),
+    )
+
+    ingest_path(state, path=str(file_path), collection=collection)
+
+    records, _ = storage.client.scroll(collection_name=collection, with_payload=True, limit=100)
+    source_types = {str(r.payload["source_type"]) for r in records if r.payload}
+    assert source_types == {"drafts"}
+
+
+def test_search_min_score_filters_hybrid_path(
+    state: AppState, collection: str, storage: QdrantStorage
+) -> None:
+    # Regression (ported): min_score was ignored on the default hybrid path.
+    _seed_chunks(storage, collection, "/var/sdet-brain-fixtures/m.md", 3)
+    high = search(state, query="text", min_score=999.0, collection=collection)
+    assert "No matches" in high
+    low = search(state, query="text", min_score=0.0, collection=collection)
+    assert "Search results for" in low
+
+
+def test_search_reranks_when_enabled(
+    storage: QdrantStorage, collection: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Ported: with RERANK_ENABLED the MCP tool must re-order via the
+    # cross-encoder. Stub the reranker (no model download).
+    _seed_chunks(storage, collection, "/var/sdet-brain-fixtures/alpha.md", 1)
+    _seed_chunks(storage, collection, "/var/sdet-brain-fixtures/beta.md", 1)
+
+    class _FakeReranker:
+        model_name = "fake/reranker"
+
+        def rerank(
+            self, query: str, candidates: list[RerankCandidate], top_k: int | None = None
+        ) -> list[RerankResult]:
+            ordered = sorted(
+                candidates,
+                key=lambda c: (
+                    0 if "beta.md" in (c.payload.payload or {}).get("source_path", "") else 1
+                ),
+            )
+            results = [
+                RerankResult(text=c.text, score=float(len(ordered) - i), payload=c.payload)
+                for i, c in enumerate(ordered)
+            ]
+            return results[: top_k or len(results)]
+
+    monkeypatch.setattr(
+        "sdet_brain.server.tools.search._get_reranker",
+        lambda settings: _FakeReranker(),
+    )
+    selection = EmbedderSelection(
+        embedder=_FakeEmbedder(),  # type: ignore[arg-type]
+        provider="ollama",
+        fell_back=False,
+        attempted=("ollama",),
+    )
+    state = AppState(
+        settings=Settings(rerank_enabled=True),
+        storage=storage,
+        selection=selection,
+    )
+    output = search(state, query="anything", limit=5, collection=collection)
+    assert output.index("beta.md") < output.index("alpha.md")
 
 
 def test_search_empty_query_raises(state: AppState, collection: str) -> None:
