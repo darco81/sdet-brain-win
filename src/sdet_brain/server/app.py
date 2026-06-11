@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
+from sdet_brain import __version__
 from sdet_brain.config import Settings, get_settings
 from sdet_brain.server.mcp_server import build_mcp
 from sdet_brain.server.routes.health import router as health_router
@@ -120,7 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="SDET Brain",
-        version="0.1.0",
+        version=__version__,
         description="Persistent RAG for the SDET brand domain.",
         lifespan=_combined_lifespan,
     )
